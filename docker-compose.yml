@@ -1,3 +1,78 @@
 # Full service definitions (Postgres, Redis, Qdrant, app) added in Module 2.
 version: "3.9"
-services: {}
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    container_name: kb_app
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    networks:
+      - kb_network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: kb_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kb_network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: kb_redis
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kb_network
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.1
+    container_name: kb_qdrant
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      # Qdrant doesn't ship curl/wget in its image, so we use its own
+      # readiness endpoint via bash's built-in /dev/tcp trick instead.
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/6333' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kb_network
+    restart: unless-stopped
+
+networks:
+  kb_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  qdrant_data:
