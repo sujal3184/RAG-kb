@@ -14,16 +14,25 @@ from fastapi.responses import JSONResponse
 
 from app.api.v1.router import api_router
 from app.config.settings import get_settings
-from app.core.exceptions import AppException, ConflictError, NotFoundError, ValidationError
+from app.core.exceptions import (
+    AppException,
+    AuthenticationError,
+    AuthorizationError,
+    ConflictError,
+    NotFoundError,
+    ValidationError,
+)
 from app.core.logging import configure_logging
 
 logger = logging.getLogger(__name__)
 
 # Maps our custom errors to HTTP status codes.
-_STATUS_MAP: dict[type[AppException], int] = {
+_EXCEPTION_STATUS_MAP: dict[type[AppException], int] = {
     NotFoundError: status.HTTP_404_NOT_FOUND,
     ConflictError: status.HTTP_409_CONFLICT,
-    ValidationError: status.HTTP_422_UNPROCESSABLE_CONTENT,
+    ValidationError: status.HTTP_422_UNPROCESSABLE_ENTITY,
+    AuthenticationError: status.HTTP_401_UNAUTHORIZED,
+    AuthorizationError: status.HTTP_403_FORBIDDEN,
 }
 
 
@@ -58,7 +67,7 @@ def _add_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(AppException)
     async def handle_app_exception(request: Request, exc: AppException) -> JSONResponse:
-        status_code = _STATUS_MAP.get(type(exc), status.HTTP_400_BAD_REQUEST)
+        status_code = _EXCEPTION_STATUS_MAP.get(type(exc), status.HTTP_400_BAD_REQUEST)
         logger.warning(
             "App error handled",
             extra={"type": type(exc).__name__, "path": str(request.url.path)},

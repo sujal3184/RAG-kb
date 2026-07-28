@@ -1,24 +1,13 @@
-"""Application settings.
-
-This is the ONLY place in the whole app that reads environment variables.
-Every other file should import `get_settings` and use the values from here.
-
-Why do it this way?
-- If a setting is missing or wrong (e.g. PORT is not a number), the app
-  will fail immediately at startup with a clear error — instead of
-  crashing randomly later, deep inside some unrelated function.
-"""
+"""Application settings."""
 
 from enum import StrEnum
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Environment(StrEnum):
-    """The environment the app is currently running in."""
-
     DEVELOPMENT = "development"
     STAGING = "staging"
     PRODUCTION = "production"
@@ -26,8 +15,6 @@ class Environment(StrEnum):
 
 
 class LogLevel(StrEnum):
-    """How detailed the logs should be."""
-
     DEBUG = "DEBUG"
     INFO = "INFO"
     WARNING = "WARNING"
@@ -36,18 +23,10 @@ class LogLevel(StrEnum):
 
 
 class Settings(BaseSettings):
-    """All configuration values the app needs, with types and defaults.
-
-    Values come from (in priority order):
-    1. Real environment variables (e.g. set by Docker)
-    2. The `.env` file
-    3. The defaults written below
-    """
-
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="ignore",  # ignore unrelated env vars instead of crashing
+        extra="ignore",
     )
 
     # App
@@ -64,17 +43,46 @@ class Settings(BaseSettings):
     LOG_LEVEL: LogLevel = LogLevel.INFO
     LOG_JSON: bool = False
 
+    # PostgreSQL
+    POSTGRES_HOST: str = "localhost"
+    POSTGRES_PORT: int = 5432
+    POSTGRES_USER: str = "kb_admin"
+    POSTGRES_PASSWORD: str = "kb_dev_password"
+    POSTGRES_DB: str = "knowledge_base"
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 10
+    DB_ECHO: bool = False
+
+    # --- Security / JWT ---------------------------------------------------
+    SECRET_KEY: str = Field(
+        default="dev-only-secret-change-me",
+        description="Used to sign JWTs. MUST be a long random string in production.",
+    )
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+    # --- Email verification / password reset -------------------------------
+    EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS: int = 24
+    PASSWORD_RESET_TOKEN_EXPIRE_HOURS: int = 1
+
+     # Base URL of the (future) frontend, used to build links inside emails,
+    # e.g. f"{FRONTEND_BASE_URL}/verify-email?token=xyz"
+    FRONTEND_BASE_URL: str = "http://localhost:3000"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def database_url(self) -> str:
+        return (
+            f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
+
     @property
     def is_production(self) -> bool:
-        """True only when running in production."""
         return self.ENVIRONMENT == Environment.PRODUCTION
 
 
 @lru_cache
 def get_settings() -> Settings:
-    """Return the app settings (loaded only once, then reused).
-
-    Using a function (instead of just a global variable) lets us swap in
-    fake settings during tests, using FastAPI's dependency override system.
-    """
     return Settings()

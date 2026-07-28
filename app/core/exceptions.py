@@ -1,11 +1,4 @@
-"""Custom error types used across the whole app.
-
-Instead of raising plain `Exception` (too vague) or `HTTPException`
-directly from business logic (mixes web-framework concerns into business
-rules), every meaningful error in this app is one of these types.
-
-Later, `main.py` catches these and turns them into proper HTTP responses.
-"""
+"""Custom error types used across the whole app."""
 
 
 class AppException(Exception):
@@ -27,3 +20,11 @@ class ConflictError(AppException):
 
 class ValidationError(AppException):
     """The input data is invalid in a way pydantic alone can't catch. (-> HTTP 422)"""
+
+
+class AuthenticationError(AppException):
+    """Login failed, or a token is missing/invalid/expired. (-> HTTP 401)"""
+
+
+class AuthorizationError(AppException):
+    """The user is logged in but not allowed to do this. (-> HTTP 403)"""
