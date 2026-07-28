@@ -79,6 +79,16 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE_MB: int = 50
     ALLOWED_UPLOAD_EXTENSIONS: str = "pdf,docx,txt,md,html,csv"
 
+    # --- Chunking -------------------------------------------------------
+    DEFAULT_CHUNK_SIZE_TOKENS: int = 500
+    DEFAULT_CHUNK_OVERLAP_TOKENS: int = 50
+    # The tokenizer encoding used to COUNT tokens for chunk sizing. This is
+    # independent of which embedding model we eventually use (Module 9) —
+    # it's just a consistent, fast way to measure "how much text is this."
+    TOKENIZER_ENCODING: str = "cl100k_base"
+
+    
+
     @property
     def max_upload_size_bytes(self) -> int:
         """Convert the configured MB limit into bytes for easy comparison."""
