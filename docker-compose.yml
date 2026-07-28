@@ -18,6 +18,8 @@ services:
     networks:
       - kb_network
     restart: unless-stopped
+    volumes:
+      - uploaded_files:/code/data/uploads  
 
   postgres:
     image: postgres:16-alpine
@@ -76,3 +78,4 @@ volumes:
   postgres_data:
   redis_data:
   qdrant_data:
+  uploaded_files:

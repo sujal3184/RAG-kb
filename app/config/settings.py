@@ -70,6 +70,26 @@ class Settings(BaseSettings):
     # e.g. f"{FRONTEND_BASE_URL}/verify-email?token=xyz"
     FRONTEND_BASE_URL: str = "http://localhost:3000"
 
+    # --- File storage -------------------------------------------------------
+    # Where uploaded files are stored on disk. Inside Docker this should be
+    # a mounted volume path so files survive container restarts.
+    LOCAL_STORAGE_PATH: str = "./data/uploads"
+
+    # --- Document upload limits ----------------------------------------------
+    MAX_UPLOAD_SIZE_MB: int = 50
+    ALLOWED_UPLOAD_EXTENSIONS: str = "pdf,docx,txt,md,html,csv"
+
+    @property
+    def max_upload_size_bytes(self) -> int:
+        """Convert the configured MB limit into bytes for easy comparison."""
+        return self.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+
+    @property
+    def allowed_upload_extensions_set(self) -> set[str]:
+        """Parse the comma-separated extension list into a lowercase set."""
+        return {ext.strip().lower() for ext in self.ALLOWED_UPLOAD_EXTENSIONS.split(",")}
+    
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def database_url(self) -> str:

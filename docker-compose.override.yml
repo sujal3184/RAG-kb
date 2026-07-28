@@ -6,11 +6,12 @@ services:
       uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - ./app:/build/app
+      - ./data/uploads:/build/data/uploads   
     ports:
       - "8000:8000"
     environment:
       - PYTHONDONTWRITEBYTECODE=1
-      - POSTGRES_HOST=postgres   # ADD THIS — overrides .env's "localhost" just for this container
+      - POSTGRES_HOST=postgres   
   
 
   postgres:

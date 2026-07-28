@@ -19,6 +19,14 @@ from app.services.auth_service import AuthService
 from app.services.email.base import EmailSender
 from app.services.email.console_email_sender import ConsoleEmailSender
 
+from app.repositories.knowledge_base_repository import KnowledgeBaseRepository
+from app.services.knowledge_base_service import KnowledgeBaseService
+
+from app.repositories.document_repository import DocumentRepository
+from app.services.document_service import DocumentService
+from app.storage.base import FileStorage
+from app.storage.local_storage import LocalFileStorage
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{get_settings().API_V1_PREFIX}/auth/login")
 
 
@@ -80,3 +88,55 @@ async def get_current_user(
         raise AuthenticationError("User no longer available")
 
     return user
+
+
+
+
+def get_knowledge_base_repository(
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> KnowledgeBaseRepository:
+    """Provide a KnowledgeBaseRepository bound to the current request's DB session."""
+    return KnowledgeBaseRepository(db)
+
+
+def get_knowledge_base_service(
+    kb_repo: Annotated[KnowledgeBaseRepository, Depends(get_knowledge_base_repository)],
+) -> KnowledgeBaseService:
+    """Provide a KnowledgeBaseService with its repository wired up."""
+    return KnowledgeBaseService(kb_repo)
+
+
+
+def get_file_storage(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> FileStorage:
+    """Provide the file storage implementation.
+
+    This is the ONE place to change when cloud storage is added later —
+    swap `LocalFileStorage(...)` for e.g. `S3FileStorage(settings)`, and
+    nothing else in the app needs to change.
+    """
+    return LocalFileStorage(base_path=settings.LOCAL_STORAGE_PATH)
+
+
+def get_document_repository(
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> DocumentRepository:
+    """Provide a DocumentRepository bound to the current request's DB session."""
+    return DocumentRepository(db)
+
+
+def get_document_service(
+    document_repo: Annotated[DocumentRepository, Depends(get_document_repository)],
+    kb_service: Annotated[KnowledgeBaseService, Depends(get_knowledge_base_service)],
+    file_storage: Annotated[FileStorage, Depends(get_file_storage)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> DocumentService:
+    """Provide a DocumentService with all its dependencies wired up."""
+    return DocumentService(
+        document_repo,
+        kb_service,
+        file_storage,
+        max_upload_size_bytes=settings.max_upload_size_bytes,
+        allowed_extensions=settings.allowed_upload_extensions_set,
+    )
