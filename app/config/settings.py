@@ -87,7 +87,20 @@ class Settings(BaseSettings):
     # it's just a consistent, fast way to measure "how much text is this."
     TOKENIZER_ENCODING: str = "cl100k_base"
 
-    
+    # --- Embeddings -------------------------------------------------------
+    PRIMARY_EMBEDDING_MODEL: str = "BAAI/bge-m3"
+    FALLBACK_EMBEDDING_MODEL: str = "nomic-ai/nomic-embed-text-v1.5"
+    EMBEDDING_BATCH_SIZE: int = 32
+    # Where sentence-transformers caches downloaded model weights.
+    EMBEDDING_MODEL_CACHE_DIR: str = "./data/models"
+
+    # --- Qdrant -----------------------------------------------------------
+    QDRANT_HOST: str = "localhost"
+    QDRANT_PORT: int = 6333
+    QDRANT_COLLECTION_PREFIX: str = "kb_"
+    # How many results to fetch per search call by default (can be
+    # overridden per-call by future retrieval logic in Module 11).
+    QDRANT_DEFAULT_TOP_K: int = 10
 
     @property
     def max_upload_size_bytes(self) -> int:

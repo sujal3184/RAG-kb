@@ -27,6 +27,13 @@ from app.services.document_service import DocumentService
 from app.storage.base import FileStorage
 from app.storage.local_storage import LocalFileStorage
 
+from functools import lru_cache
+
+from app.embeddings.bge_m3_provider import BgeM3Provider
+from app.embeddings.embedding_service import EmbeddingService
+from app.embeddings.nomic_provider import NomicProvider
+
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{get_settings().API_V1_PREFIX}/auth/login")
 
 
@@ -140,3 +147,26 @@ def get_document_service(
         max_upload_size_bytes=settings.max_upload_size_bytes,
         allowed_extensions=settings.allowed_upload_extensions_set,
     )
+
+
+
+@lru_cache
+def get_embedding_service() -> EmbeddingService:
+    """Provide a singleton EmbeddingService.
+
+    Cached with lru_cache (not per-request) because embedding models are
+    expensive to load — we want exactly ONE instance of each model loaded
+    per running process, shared across all requests, not one per request.
+    """
+    settings = get_settings()
+    primary = BgeM3Provider(
+        settings.PRIMARY_EMBEDDING_MODEL,
+        cache_dir=settings.EMBEDDING_MODEL_CACHE_DIR,
+        batch_size=settings.EMBEDDING_BATCH_SIZE,
+    )
+    fallback = NomicProvider(
+        settings.FALLBACK_EMBEDDING_MODEL,
+        cache_dir=settings.EMBEDDING_MODEL_CACHE_DIR,
+        batch_size=settings.EMBEDDING_BATCH_SIZE,
+    )
+    return EmbeddingService(primary, fallback)
