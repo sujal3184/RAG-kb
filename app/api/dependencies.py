@@ -36,6 +36,9 @@ from app.embeddings.nomic_provider import NomicProvider
 from app.retrieval.base import VectorStore
 from app.retrieval.qdrant_store import QdrantVectorStore
 
+from app.retrieval.bm25_store import BM25Store
+from app.retrieval.hybrid_retriever import HybridRetriever
+
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{get_settings().API_V1_PREFIX}/auth/login")
 
@@ -189,4 +192,32 @@ def get_vector_store() -> VectorStore:
         host=settings.QDRANT_HOST,
         port=settings.QDRANT_PORT,
         collection_prefix=settings.QDRANT_COLLECTION_PREFIX,
+    )
+
+
+
+@lru_cache
+def get_bm25_store() -> BM25Store:
+    """Provide a singleton BM25Store.
+
+    BM25Store itself holds no per-request state (indexes are built
+    on-the-fly per search call), so a single shared instance is safe and
+    avoids pointless re-instantiation.
+    """
+    return BM25Store()
+
+
+def get_hybrid_retriever(
+    vector_store: Annotated[VectorStore, Depends(get_vector_store)],
+    bm25_store: Annotated[BM25Store, Depends(get_bm25_store)],
+    embedding_service: Annotated[EmbeddingService, Depends(get_embedding_service)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> HybridRetriever:
+    """Provide a HybridRetriever with all its dependencies wired up."""
+    return HybridRetriever(
+        vector_store,
+        bm25_store,
+        embedding_service,
+        top_k_per_method=settings.HYBRID_TOP_K_PER_METHOD,
+        rrf_k=settings.HYBRID_DENSE_WEIGHT_RRF_K,
     )

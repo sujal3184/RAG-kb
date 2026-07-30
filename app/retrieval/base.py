@@ -62,6 +62,34 @@ class SearchResult:
     extra_metadata: dict[str, Any] = field(default_factory=dict)
 
 
+# Add this new dataclass alongside VectorPoint and SearchResult:
+
+@dataclass
+class RetrievedChunk:
+    """A chunk retrieved via hybrid search, with fused ranking information.
+
+    Attributes:
+        chunk_id: identifier of the retrieved chunk.
+        document_id: which Document this chunk came from.
+        chunk_index: this chunk's position within its document.
+        text: the chunk's text content.
+        fused_score: the final combined score after Reciprocal Rank Fusion
+            — higher means more relevant overall.
+        source_methods: which retrieval method(s) found this chunk
+            ("dense", "bm25", or both) — useful for debugging/observability.
+        extra_metadata: any additional payload fields.
+    """
+
+    chunk_id: str
+    document_id: uuid.UUID
+    chunk_index: int
+    text: str
+    fused_score: float
+    source_methods: list[str] = field(default_factory=list)
+    extra_metadata: dict[str, Any] = field(default_factory=dict)
+    
+
+
 class VectorStore(ABC):
     """Abstract base class for storing and searching vector embeddings."""
 
@@ -120,3 +148,6 @@ class VectorStore(ABC):
         of its vectors in one operation.
         """
         raise NotImplementedError
+
+
+
