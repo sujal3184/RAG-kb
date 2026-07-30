@@ -116,8 +116,31 @@ class RankedChunk:
     text: str
     rerank_score: float
     source_methods: list[str] = field(default_factory=list)
-    
 
+# Add this new dataclass alongside RankedChunk:
+
+@dataclass
+class CompressedChunk:
+    """A chunk that survived context compression — ready for prompt building.
+
+    Attributes:
+        chunk_id: identifier of the chunk.
+        document_id: which Document this chunk came from.
+        chunk_index: this chunk's position within its document.
+        text: the chunk's text content.
+        rerank_score: the score this chunk had after reranking (Module 12),
+            preserved for observability/debugging.
+        token_count: how many tokens this chunk's text contains — useful
+            for the prompt builder (Module 14) to track total context size.
+    """
+
+    chunk_id: str
+    document_id: uuid.UUID
+    chunk_index: int
+    text: str
+    rerank_score: float
+    token_count: int
+    
 
 class VectorStore(ABC):
     """Abstract base class for storing and searching vector embeddings."""

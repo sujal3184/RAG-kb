@@ -126,6 +126,19 @@ class Settings(BaseSettings):
     MAX_CONTEXT_TOKENS: int = 4000
     # Hard cap on total tokens across all chunks passed to the LLM prompt.
 
+     # --- Prompt Builder -------------------------------------------------------
+    MAX_CONVERSATION_HISTORY_MESSAGES: int = 10
+    # How many prior turns (user+assistant pairs) to include for context,
+
+     # --- Groq LLM -----------------------------------------------------------
+    GROQ_API_KEY: str = "change-me"
+    PRIMARY_LLM_MODEL: str = "llama-3.3-70b-versatile"
+    FALLBACK_LLM_MODEL: str = "llama-3.1-8b-instant"
+    LLM_TEMPERATURE: float = 0.2
+    LLM_MAX_OUTPUT_TOKENS: int = 1024
+    LLM_REQUEST_TIMEOUT_SECONDS: float = 30.0
+    LLM_MAX_RETRIES: int = 2
+
     @property
     def max_upload_size_bytes(self) -> int:
         """Convert the configured MB limit into bytes for easy comparison."""

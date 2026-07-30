@@ -41,6 +41,16 @@ from app.retrieval.hybrid_retriever import HybridRetriever
 from app.retrieval.reranker import BgeRerankerProvider, RerankerProvider
 from app.retrieval.reranking_service import RerankingService
 
+from app.chunking.base import TokenCounter
+from app.retrieval.context_compressor import ContextCompressor
+from app.retrieval.deduplication import Deduplicator
+
+from app.llm.prompt_builder import PromptBuilder
+
+from app.llm.groq_provider import GroqProvider
+from app.llm.llm_service import LLMService
+
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{get_settings().API_V1_PREFIX}/auth/login")
 
 
@@ -244,3 +254,60 @@ def get_reranking_service(
 ) -> RerankingService:
     """Provide a RerankingService with its reranker wired up."""
     return RerankingService(reranker)
+
+
+@lru_cache
+def get_token_counter() -> TokenCounter:
+    """Provide a singleton TokenCounter, shared across chunking (Module 8)
+    and context compression (this module) so 'token' always means the
+    same thing throughout the app."""
+    settings = get_settings()
+    return TokenCounter(settings.TOKENIZER_ENCODING)
+
+
+def get_deduplicator(
+    embedding_service: Annotated[EmbeddingService, Depends(get_embedding_service)],
+) -> Deduplicator:
+    """Provide a Deduplicator with its embedding service wired up."""
+    return Deduplicator(embedding_service)
+
+
+def get_context_compressor(
+    deduplicator: Annotated[Deduplicator, Depends(get_deduplicator)],
+    token_counter: Annotated[TokenCounter, Depends(get_token_counter)],
+) -> ContextCompressor:
+    """Provide a ContextCompressor with its dependencies wired up."""
+    return ContextCompressor(deduplicator, token_counter)
+
+
+def get_prompt_builder(
+    token_counter: Annotated[TokenCounter, Depends(get_token_counter)],
+) -> PromptBuilder:
+    """Provide a PromptBuilder with its token counter wired up."""
+    return PromptBuilder(token_counter)
+
+
+@lru_cache
+def get_llm_service() -> LLMService:
+    """Provide a singleton LLMService.
+
+    Cached with lru_cache — same reasoning as get_embedding_service
+    (Module 9): the underlying Groq client connections are cheap to
+    reuse across requests, and we want consistent configuration process-wide.
+    """
+    settings = get_settings()
+    primary = GroqProvider(
+        api_key=settings.GROQ_API_KEY,
+        model=settings.PRIMARY_LLM_MODEL,
+        temperature=settings.LLM_TEMPERATURE,
+        max_output_tokens=settings.LLM_MAX_OUTPUT_TOKENS,
+        timeout_seconds=settings.LLM_REQUEST_TIMEOUT_SECONDS,
+    )
+    fallback = GroqProvider(
+        api_key=settings.GROQ_API_KEY,
+        model=settings.FALLBACK_LLM_MODEL,
+        temperature=settings.LLM_TEMPERATURE,
+        max_output_tokens=settings.LLM_MAX_OUTPUT_TOKENS,
+        timeout_seconds=settings.LLM_REQUEST_TIMEOUT_SECONDS,
+    )
+    return LLMService(primary, fallback, max_retries=settings.LLM_MAX_RETRIES)
