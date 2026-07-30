@@ -87,6 +87,35 @@ class RetrievedChunk:
     fused_score: float
     source_methods: list[str] = field(default_factory=list)
     extra_metadata: dict[str, Any] = field(default_factory=dict)
+
+
+# Add this new dataclass alongside RetrievedChunk:
+
+@dataclass
+class RankedChunk:
+    """A chunk after reranking, with the reranker's relevance score.
+
+    Attributes:
+        chunk_id: identifier of the chunk.
+        document_id: which Document this chunk came from.
+        chunk_index: this chunk's position within its document.
+        text: the chunk's text content.
+        rerank_score: the cross-encoder's relevance score for this
+            specific query + chunk pair (higher = more relevant). Unlike
+            fused_score from hybrid retrieval, this score is NOT
+            comparable across different queries — it's only meaningful
+            for ranking candidates within the SAME query.
+        source_methods: preserved from the original RetrievedChunk, for
+            observability (which retrieval method(s) originally surfaced
+            this chunk before reranking).
+    """
+
+    chunk_id: str
+    document_id: uuid.UUID
+    chunk_index: int
+    text: str
+    rerank_score: float
+    source_methods: list[str] = field(default_factory=list)
     
 
 

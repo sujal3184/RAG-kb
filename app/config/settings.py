@@ -112,7 +112,19 @@ class Settings(BaseSettings):
     # How many results each individual method (dense/BM25) contributes
     # BEFORE fusion — kept higher than the final desired result count so
     # fusion has enough candidates to work with.
-    
+
+
+    # --- Reranking ----------------------------------------------------------
+    RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
+    RERANKER_MODEL_CACHE_DIR: str = "./data/models"
+    RERANKER_BATCH_SIZE: int = 16
+
+    # --- Context Compression -------------------------------------------------
+    DEDUPLICATION_SIMILARITY_THRESHOLD: float = 0.92
+    # Chunks with cosine similarity above this threshold are considered
+    # near-duplicates; only the highest-ranked one is kept.
+    MAX_CONTEXT_TOKENS: int = 4000
+    # Hard cap on total tokens across all chunks passed to the LLM prompt.
 
     @property
     def max_upload_size_bytes(self) -> int:

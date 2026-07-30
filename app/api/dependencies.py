@@ -38,7 +38,8 @@ from app.retrieval.qdrant_store import QdrantVectorStore
 
 from app.retrieval.bm25_store import BM25Store
 from app.retrieval.hybrid_retriever import HybridRetriever
-
+from app.retrieval.reranker import BgeRerankerProvider, RerankerProvider
+from app.retrieval.reranking_service import RerankingService
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{get_settings().API_V1_PREFIX}/auth/login")
 
@@ -221,3 +222,25 @@ def get_hybrid_retriever(
         top_k_per_method=settings.HYBRID_TOP_K_PER_METHOD,
         rrf_k=settings.HYBRID_DENSE_WEIGHT_RRF_K,
     )
+
+@lru_cache
+def get_reranker_provider() -> RerankerProvider:
+    """Provide a singleton RerankerProvider.
+
+    Cached with lru_cache — same reasoning as embedding models (Module 9):
+    the underlying model is expensive to load and safe to share across
+    requests.
+    """
+    settings = get_settings()
+    return BgeRerankerProvider(
+        settings.RERANKER_MODEL,
+        cache_dir=settings.RERANKER_MODEL_CACHE_DIR,
+        batch_size=settings.RERANKER_BATCH_SIZE,
+    )
+
+
+def get_reranking_service(
+    reranker: Annotated[RerankerProvider, Depends(get_reranker_provider)],
+) -> RerankingService:
+    """Provide a RerankingService with its reranker wired up."""
+    return RerankingService(reranker)
