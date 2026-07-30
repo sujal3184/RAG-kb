@@ -102,6 +102,18 @@ class Settings(BaseSettings):
     # overridden per-call by future retrieval logic in Module 11).
     QDRANT_DEFAULT_TOP_K: int = 10
 
+
+     # --- Hybrid Retrieval ---------------------------------------------------
+    HYBRID_DENSE_WEIGHT_RRF_K: int = 60
+    # RRF's "k" constant — a standard damping factor (60 is the widely-used
+    # default from the original RRF paper) controlling how much lower-ranked
+    # results still contribute to the fused score.
+    HYBRID_TOP_K_PER_METHOD: int = 20
+    # How many results each individual method (dense/BM25) contributes
+    # BEFORE fusion — kept higher than the final desired result count so
+    # fusion has enough candidates to work with.
+    
+
     @property
     def max_upload_size_bytes(self) -> int:
         """Convert the configured MB limit into bytes for easy comparison."""

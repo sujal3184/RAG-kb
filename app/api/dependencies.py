@@ -33,6 +33,9 @@ from app.embeddings.bge_m3_provider import BgeM3Provider
 from app.embeddings.embedding_service import EmbeddingService
 from app.embeddings.nomic_provider import NomicProvider
 
+from app.retrieval.base import VectorStore
+from app.retrieval.qdrant_store import QdrantVectorStore
+
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{get_settings().API_V1_PREFIX}/auth/login")
 
@@ -170,3 +173,20 @@ def get_embedding_service() -> EmbeddingService:
         batch_size=settings.EMBEDDING_BATCH_SIZE,
     )
     return EmbeddingService(primary, fallback)
+
+
+
+@lru_cache
+def get_vector_store() -> VectorStore:
+    """Provide a singleton VectorStore.
+
+    Cached with lru_cache — the Qdrant client manages its own connection
+    pooling internally, so we want one shared client per process, not one
+    per request (same reasoning as get_embedding_service in Module 9).
+    """
+    settings = get_settings()
+    return QdrantVectorStore(
+        host=settings.QDRANT_HOST,
+        port=settings.QDRANT_PORT,
+        collection_prefix=settings.QDRANT_COLLECTION_PREFIX,
+    )
