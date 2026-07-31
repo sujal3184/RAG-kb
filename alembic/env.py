@@ -22,7 +22,16 @@ from app.db.base import Base
 # Import every model module here so Base.metadata knows about all tables.
 # Without this import, Alembic would think these tables don't exist yet
 # and try to create migrations that delete them.
-from app.models import document, knowledge_base, refresh_token, user, verification_token  # noqa: F401
+from app.models import (  # noqa: F401
+    chunk,
+    conversation,
+    document,
+    knowledge_base,
+    message,
+    refresh_token,
+    user,
+    verification_token,
+)
 
 config = context.config
 

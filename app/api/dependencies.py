@@ -50,6 +50,13 @@ from app.llm.prompt_builder import PromptBuilder
 from app.llm.groq_provider import GroqProvider
 from app.llm.llm_service import LLMService
 
+from app.repositories.chunk_repository import ChunkRepository
+from app.repositories.conversation_repository import ConversationRepository
+from app.repositories.message_repository import MessageRepository
+from app.retrieval.hybrid_retriever import HybridRetriever
+from app.retrieval.reranking_service import RerankingService
+from app.services.conversation_service import ConversationService
+
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{get_settings().API_V1_PREFIX}/auth/login")
 
@@ -311,3 +318,80 @@ def get_llm_service() -> LLMService:
         timeout_seconds=settings.LLM_REQUEST_TIMEOUT_SECONDS,
     )
     return LLMService(primary, fallback, max_retries=settings.LLM_MAX_RETRIES)
+
+
+
+def get_conversation_repository(
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ConversationRepository:
+    return ConversationRepository(db)
+
+
+def get_message_repository(
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> MessageRepository:
+    return MessageRepository(db)
+
+
+def get_chunk_repository(
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ChunkRepository:
+    return ChunkRepository(db)
+
+
+def get_hybrid_retriever_service(
+    vector_store: Annotated[VectorStore, Depends(get_vector_store)],
+    bm25_store: Annotated[BM25Store, Depends(get_bm25_store)],
+    embedding_service: Annotated[EmbeddingService, Depends(get_embedding_service)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> HybridRetriever:
+    """Provide a HybridRetriever — separate name from Module 11's original
+    get_hybrid_retriever to avoid a naming collision now that this module
+    also needs one wired identically; both simply build the same class."""
+    return HybridRetriever(
+        vector_store,
+        bm25_store,
+        embedding_service,
+        top_k_per_method=settings.HYBRID_TOP_K_PER_METHOD,
+        rrf_k=settings.HYBRID_DENSE_WEIGHT_RRF_K,
+    )
+
+
+def get_reranking_service_instance(
+    reranker: Annotated[RerankerProvider, Depends(get_reranker_provider)],
+) -> RerankingService:
+    return RerankingService(reranker)
+
+
+def get_conversation_service(
+    conversation_repo: Annotated[ConversationRepository, Depends(get_conversation_repository)],
+    message_repo: Annotated[MessageRepository, Depends(get_message_repository)],
+    chunk_repo: Annotated[ChunkRepository, Depends(get_chunk_repository)],
+    document_repo: Annotated[DocumentRepository, Depends(get_document_repository)],
+    kb_service: Annotated[KnowledgeBaseService, Depends(get_knowledge_base_service)],
+    hybrid_retriever: Annotated[HybridRetriever, Depends(get_hybrid_retriever_service)],
+    reranking_service: Annotated[RerankingService, Depends(get_reranking_service_instance)],
+    context_compressor: Annotated[ContextCompressor, Depends(get_context_compressor)],
+    prompt_builder: Annotated[PromptBuilder, Depends(get_prompt_builder)],
+    llm_service: Annotated[LLMService, Depends(get_llm_service)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> ConversationService:
+    """Provide a fully-wired ConversationService — the orchestrator tying
+    together every retrieval-pipeline module built since Module 9."""
+    return ConversationService(
+        conversation_repo,
+        message_repo,
+        chunk_repo,
+        document_repo,
+        kb_service,
+        hybrid_retriever,
+        reranking_service,
+        context_compressor,
+        prompt_builder,
+        llm_service,
+        max_history_messages=settings.MAX_CONVERSATION_HISTORY_MESSAGES,
+        retrieval_top_k=settings.HYBRID_TOP_K_PER_METHOD,
+        rerank_top_k=10,
+        similarity_threshold=settings.DEDUPLICATION_SIMILARITY_THRESHOLD,
+        max_context_tokens=settings.MAX_CONTEXT_TOKENS,
+    )

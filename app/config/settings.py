@@ -139,6 +139,21 @@ class Settings(BaseSettings):
     LLM_REQUEST_TIMEOUT_SECONDS: float = 30.0
     LLM_MAX_RETRIES: int = 2
 
+
+    # --- Redis / Celery -------------------------------------------------------
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+    CELERY_TASK_MAX_RETRIES: int = 3
+    CELERY_TASK_RETRY_BACKOFF_SECONDS: int = 10
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def redis_url(self) -> str:
+        """Build the Redis connection URL, used as both Celery's broker
+        and result backend."""
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+
     @property
     def max_upload_size_bytes(self) -> int:
         """Convert the configured MB limit into bytes for easy comparison."""
