@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 
 from app.models.document import Document
 from app.repositories.base import BaseRepository
+from app.models.document import DocumentStatus  # add to imports at top
 
 
 class DocumentRepository(BaseRepository[Document]):
@@ -49,3 +50,19 @@ class DocumentRepository(BaseRepository[Document]):
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+
+    async def update_status(
+        self, document_id, status: DocumentStatus, *, error_message: str | None = None
+    ) -> None:
+        """Update a document's processing status (and optional error message).
+
+        Used by the background processing task (Module 17) to record
+        progress: pending -> processing -> ready/failed.
+        """
+        document = await self.get_by_id(document_id)
+        if document is None:
+            return
+        document.status = status
+        document.error_message = error_message
+        await self.update(document)

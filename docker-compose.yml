@@ -19,7 +19,8 @@ services:
       - kb_network
     restart: unless-stopped
     volumes:
-      - uploaded_files:/code/data/uploads  
+      - uploaded_files:/code/data/uploads 
+      - model_cache:/code/data/models 
 
   postgres:
     image: postgres:16-alpine
@@ -70,6 +71,28 @@ services:
       - kb_network
     restart: unless-stopped
 
+  celery_worker:
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    container_name: kb_celery_worker
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    volumes:
+      - uploaded_files:/code/data/uploads
+      - model_cache:/code/data/models
+    networks:
+      - kb_network
+    restart: unless-stopped
+
 networks:
   kb_network:
     driver: bridge
@@ -79,3 +102,4 @@ volumes:
   redis_data:
   qdrant_data:
   uploaded_files:
+  model_cache:

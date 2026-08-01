@@ -6,8 +6,11 @@ enqueues tasks via `.delay()`/`.apply_async()`). Both processes import
 this same module so task names/routing stay consistent.
 """
 
+"""Celery application instance."""
+
 from celery import Celery
 
+from app import models  # noqa: F401 — registers ALL models before any task runs
 from app.config.settings import get_settings
 
 settings = get_settings()
@@ -18,6 +21,7 @@ celery_app = Celery(
     backend=settings.redis_url,
     include=["app.tasks.document_processing"],
 )
+
 
 celery_app.conf.update(
     task_serializer="json",

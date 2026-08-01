@@ -6,13 +6,27 @@ services:
       uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - ./app:/build/app
-      - ./data/uploads:/build/data/uploads   
+      - ./data/uploads:/build/data/uploads
+      - ./data/models:/build/data/models
     ports:
       - "8000:8000"
     environment:
       - PYTHONDONTWRITEBYTECODE=1
-      - POSTGRES_HOST=postgres   
-  
+      - POSTGRES_HOST=postgres
+      - QDRANT_HOST=qdrant
+
+  celery_worker:
+    build:
+      target: builder
+    command: >
+      uv run celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
+    volumes:
+      - ./app:/build/app
+      - ./data/uploads:/build/data/uploads
+      - ./data/models:/build/data/models
+    environment:
+      - POSTGRES_HOST=postgres
+      - QDRANT_HOST=qdrant
 
   postgres:
     ports:

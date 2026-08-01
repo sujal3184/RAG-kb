@@ -4,7 +4,8 @@ import uuid
 from typing import Annotated
 
 from fastapi import Depends
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer , HTTPBearer
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import Settings, get_settings
@@ -58,7 +59,8 @@ from app.retrieval.reranking_service import RerankingService
 from app.services.conversation_service import ConversationService
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{get_settings().API_V1_PREFIX}/auth/login")
+# oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{get_settings().API_V1_PREFIX}/auth/login")
+http_bearer_scheme = HTTPBearer()
 
 
 def get_user_repository(
@@ -104,12 +106,13 @@ def get_auth_service(
 
 
 async def get_current_user(
-    token: Annotated[str, Depends(oauth2_scheme)],
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(http_bearer_scheme)],
     user_repo: Annotated[UserRepository, Depends(get_user_repository)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> User:
+    token = credentials.credentials
     payload = decode_token(token, expected_type=TokenType.ACCESS, settings=settings)
-
+    
     user_id = payload.get("sub")
     if user_id is None:
         raise AuthenticationError("Token missing subject claim")

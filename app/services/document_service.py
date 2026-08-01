@@ -14,6 +14,8 @@ from app.models.document import Document, DocumentStatus
 from app.repositories.document_repository import DocumentRepository
 from app.services.knowledge_base_service import KnowledgeBaseService
 from app.storage.base import FileStorage
+from app.tasks.document_processing import process_document
+
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +99,7 @@ class DocumentService:
             "Document uploaded",
             extra={"document_id": str(created.id), "kb_id": str(knowledge_base_id)},
         )
+        process_document.delay(str(created.id))
         return created
 
     async def list(

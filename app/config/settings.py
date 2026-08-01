@@ -95,7 +95,7 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL_CACHE_DIR: str = "./data/models"
 
     # --- Qdrant -----------------------------------------------------------
-    QDRANT_HOST: str = "localhost"
+    QDRANT_HOST: str = "qdrant"
     QDRANT_PORT: int = 6333
     QDRANT_COLLECTION_PREFIX: str = "kb_"
     # How many results to fetch per search call by default (can be
