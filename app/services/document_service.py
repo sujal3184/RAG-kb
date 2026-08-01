@@ -15,14 +15,13 @@ from app.repositories.document_repository import DocumentRepository
 from app.services.knowledge_base_service import KnowledgeBaseService
 from app.storage.base import FileStorage
 from app.tasks.document_processing import process_document
+from app.services.conversation_service import ConversationService
 
 
 logger = logging.getLogger(__name__)
 
 
 class DocumentService:
-    """Handles upload, listing, retrieval, and deletion of documents."""
-
     def __init__(
         self,
         document_repo: DocumentRepository,
@@ -31,22 +30,22 @@ class DocumentService:
         *,
         max_upload_size_bytes: int,
         allowed_extensions: set[str],
+        conversation_service: ConversationService | None = None,
     ) -> None:
-        """Store the dependencies and configured limits this service needs.
+        """... (existing docstring, extended)
 
         Args:
-            document_repo: repository for reading/writing Document rows.
-            kb_service: used to verify the target knowledge base exists
-                and belongs to the current user before accepting an upload.
-            file_storage: abstraction for saving/reading/deleting raw files.
-            max_upload_size_bytes: reject files larger than this.
-            allowed_extensions: reject files whose extension isn't in this set.
+            conversation_service: optional, used ONLY to invalidate cached
+                RAG responses when documents change. Kept optional so
+                DocumentService remains usable/testable without needing
+                the full conversation pipeline wired up.
         """
         self.document_repo = document_repo
         self.kb_service = kb_service
         self.file_storage = file_storage
         self.max_upload_size_bytes = max_upload_size_bytes
         self.allowed_extensions = allowed_extensions
+        self.conversation_service = conversation_service
 
     async def upload(
         self,
@@ -99,9 +98,18 @@ class DocumentService:
             "Document uploaded",
             extra={"document_id": str(created.id), "kb_id": str(knowledge_base_id)},
         )
+
         process_document.delay(str(created.id))
+
+        if self.conversation_service is not None:
+            await self.conversation_service.invalidate_response_cache(
+                knowledge_base_id=knowledge_base_id
+            )
+
         return created
 
+
+    
     async def list(
         self, *, knowledge_base_id: uuid.UUID, owner_id: uuid.UUID, limit: int, offset: int
     ) -> tuple[list[Document], int]:
@@ -131,6 +139,12 @@ class DocumentService:
         await self.file_storage.delete(storage_ref=document.storage_ref)
         await self.document_repo.delete(document)
         logger.info("Document deleted", extra={"document_id": str(document_id)})
+
+        if self.conversation_service is not None:
+            await self.conversation_service.invalidate_response_cache(
+                knowledge_base_id=knowledge_base_id
+            )
+            
 
     async def _get_or_404(
         self, document_id: uuid.UUID, knowledge_base_id: uuid.UUID

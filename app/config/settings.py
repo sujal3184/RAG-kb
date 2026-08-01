@@ -147,6 +147,25 @@ class Settings(BaseSettings):
     CELERY_TASK_MAX_RETRIES: int = 3
     CELERY_TASK_RETRY_BACKOFF_SECONDS: int = 10
 
+
+    # --- Caching -------------------------------------------------------------
+    EMBEDDING_CACHE_TTL_SECONDS: int = 86400       # 24 hours — embeddings are stable
+    RAG_RESPONSE_CACHE_TTL_SECONDS: int = 300       # 5 minutes — answers can go stale
+    CACHE_ENABLED: bool = True
+
+    # --- Observability --------------------------------------------------------
+    OTEL_ENABLED: bool = True
+    OTEL_SERVICE_NAME: str = "knowledge-base-rag"
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://otel-collector:4317"
+
+    METRICS_ENABLED: bool = True
+
+    LANGFUSE_ENABLED: bool = False
+    LANGFUSE_PUBLIC_KEY: str = ""
+    LANGFUSE_SECRET_KEY: str = ""
+    LANGFUSE_HOST: str = "http://langfuse:3000"
+    
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def redis_url(self) -> str:

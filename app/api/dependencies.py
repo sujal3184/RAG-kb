@@ -58,6 +58,10 @@ from app.retrieval.hybrid_retriever import HybridRetriever
 from app.retrieval.reranking_service import RerankingService
 from app.services.conversation_service import ConversationService
 
+from redis.asyncio import Redis
+
+from app.core.cache import CacheService
+
 
 # oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{get_settings().API_V1_PREFIX}/auth/login")
 http_bearer_scheme = HTTPBearer()
@@ -112,7 +116,7 @@ async def get_current_user(
 ) -> User:
     token = credentials.credentials
     payload = decode_token(token, expected_type=TokenType.ACCESS, settings=settings)
-    
+
     user_id = payload.get("sub")
     if user_id is None:
         raise AuthenticationError("Token missing subject claim")
@@ -160,31 +164,28 @@ def get_document_repository(
     return DocumentRepository(db)
 
 
-def get_document_service(
-    document_repo: Annotated[DocumentRepository, Depends(get_document_repository)],
-    kb_service: Annotated[KnowledgeBaseService, Depends(get_knowledge_base_service)],
-    file_storage: Annotated[FileStorage, Depends(get_file_storage)],
-    settings: Annotated[Settings, Depends(get_settings)],
-) -> DocumentService:
-    """Provide a DocumentService with all its dependencies wired up."""
-    return DocumentService(
-        document_repo,
-        kb_service,
-        file_storage,
-        max_upload_size_bytes=settings.max_upload_size_bytes,
-        allowed_extensions=settings.allowed_upload_extensions_set,
-    )
+@lru_cache
+def get_redis_client() -> Redis:
+    """Provide a singleton async Redis client, shared across the app.
 
+    Cached with lru_cache — Redis clients manage their own connection
+    pooling internally, so one shared instance per process is correct.
+    """
+    settings = get_settings()
+    return Redis(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB)
+
+
+def get_cache_service(
+    redis_client: Annotated[Redis, Depends(get_redis_client)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> CacheService:
+    """Provide a CacheService wired to the shared Redis client."""
+    return CacheService(redis_client, enabled=settings.CACHE_ENABLED)
 
 
 @lru_cache
 def get_embedding_service() -> EmbeddingService:
-    """Provide a singleton EmbeddingService.
-
-    Cached with lru_cache (not per-request) because embedding models are
-    expensive to load — we want exactly ONE instance of each model loaded
-    per running process, shared across all requests, not one per request.
-    """
+    """Provide a singleton EmbeddingService, now with caching wired in."""
     settings = get_settings()
     primary = BgeM3Provider(
         settings.PRIMARY_EMBEDDING_MODEL,
@@ -196,7 +197,11 @@ def get_embedding_service() -> EmbeddingService:
         cache_dir=settings.EMBEDDING_MODEL_CACHE_DIR,
         batch_size=settings.EMBEDDING_BATCH_SIZE,
     )
-    return EmbeddingService(primary, fallback)
+    redis_client = Redis(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB)
+    cache = CacheService(redis_client, enabled=settings.CACHE_ENABLED)
+    return EmbeddingService(
+        primary, fallback, cache=cache, cache_ttl_seconds=settings.EMBEDDING_CACHE_TTL_SECONDS
+    )
 
 
 
@@ -377,10 +382,10 @@ def get_conversation_service(
     context_compressor: Annotated[ContextCompressor, Depends(get_context_compressor)],
     prompt_builder: Annotated[PromptBuilder, Depends(get_prompt_builder)],
     llm_service: Annotated[LLMService, Depends(get_llm_service)],
+    cache: Annotated[CacheService, Depends(get_cache_service)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> ConversationService:
-    """Provide a fully-wired ConversationService — the orchestrator tying
-    together every retrieval-pipeline module built since Module 9."""
+    """Provide a fully-wired ConversationService, now with response caching."""
     return ConversationService(
         conversation_repo,
         message_repo,
@@ -397,4 +402,26 @@ def get_conversation_service(
         rerank_top_k=10,
         similarity_threshold=settings.DEDUPLICATION_SIMILARITY_THRESHOLD,
         max_context_tokens=settings.MAX_CONTEXT_TOKENS,
+        cache=cache,
+        response_cache_ttl_seconds=settings.RAG_RESPONSE_CACHE_TTL_SECONDS,
     )
+
+def get_document_service(
+    document_repo: Annotated[DocumentRepository, Depends(get_document_repository)],
+    kb_service: Annotated[KnowledgeBaseService, Depends(get_knowledge_base_service)],
+    file_storage: Annotated[FileStorage, Depends(get_file_storage)],
+    conversation_service: Annotated[ConversationService, Depends(get_conversation_service)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> DocumentService:
+    """Provide a DocumentService, now wired to invalidate the response
+    cache whenever documents change."""
+    return DocumentService(
+        document_repo,
+        kb_service,
+        file_storage,
+        max_upload_size_bytes=settings.max_upload_size_bytes,
+        allowed_extensions=settings.allowed_upload_extensions_set,
+        conversation_service=conversation_service,
+    )
+
+

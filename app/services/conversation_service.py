@@ -24,13 +24,14 @@ from app.retrieval.context_compressor import ContextCompressor
 from app.retrieval.hybrid_retriever import HybridRetriever
 from app.retrieval.reranking_service import RerankingService
 from app.services.knowledge_base_service import KnowledgeBaseService
+from app.core.cache import CacheService
+
+_RESPONSE_CACHE_NAMESPACE = "rag_response"
 
 logger = logging.getLogger(__name__)
 
 
 class ConversationService:
-    """Manages conversations and generates RAG-powered replies."""
-
     def __init__(
         self,
         conversation_repo: ConversationRepository,
@@ -49,11 +50,18 @@ class ConversationService:
         rerank_top_k: int,
         similarity_threshold: float,
         max_context_tokens: int,
+        cache: CacheService | None = None,
+        response_cache_ttl_seconds: int = 300,
     ) -> None:
-        """Store all dependencies needed to manage conversations and
-        generate answers. This is intentionally a wide constructor — it
-        reflects ConversationService's role as the orchestrator tying
-        together every retrieval-pipeline module built so far."""
+        """... (existing docstring, extended)
+
+        Args:
+            cache: optional CacheService for caching full RAG responses.
+                If None, every message is answered fresh (no response
+                caching) — keeps ConversationService usable without Redis.
+            response_cache_ttl_seconds: how long a cached response for an
+                identical (knowledge_base_id, query) pair remains valid.
+        """
         self.conversation_repo = conversation_repo
         self.message_repo = message_repo
         self.chunk_repo = chunk_repo
@@ -69,6 +77,8 @@ class ConversationService:
         self.rerank_top_k = rerank_top_k
         self.similarity_threshold = similarity_threshold
         self.max_context_tokens = max_context_tokens
+        self._cache = cache
+        self._response_cache_ttl_seconds = response_cache_ttl_seconds
 
     async def create_conversation(
         self, *, knowledge_base_id: uuid.UUID, owner_id: uuid.UUID, title: str | None
@@ -110,34 +120,37 @@ class ConversationService:
         owner_id: uuid.UUID,
         content: str,
     ) -> tuple[Message, Message, list[str]]:
-        """Send a user message and generate a RAG-powered assistant reply.
-
-        This is the core use case tying together every retrieval-pipeline
-        module: persist the user's message, run hybrid retrieval + rerank
-        + compression over the knowledge base, build a prompt including
-        recent conversation history, generate a response, and persist the
-        assistant's reply.
-
-        Args:
-            conversation_id: which conversation this message belongs to.
-            knowledge_base_id: which knowledge base to search for context.
-            owner_id: the current user — verified as the KB's owner.
-            content: the user's message text.
-
-        Returns:
-            A tuple of (user_message, assistant_message, cited_filenames).
-
-        Raises:
-            NotFoundError: if the KB or conversation doesn't exist / isn't owned.
-        """
+        """..."""
         await self.kb_service.get(kb_id=knowledge_base_id, owner_id=owner_id)
         conversation = await self._get_conversation_or_404(conversation_id, knowledge_base_id)
+
+        # Load history BEFORE saving the new user message, so "history" truly
+        # reflects prior turns only — otherwise the just-created message would
+        # always make history non-empty, permanently disabling response caching.
+        history = await self._load_conversation_history(conversation.id)
 
         user_message = await self.message_repo.create(
             Message(conversation_id=conversation.id, role=MessageRole.USER, content=content)
         )
 
-        history = await self._load_conversation_history(conversation.id)
+        cached_response = None
+        cache_key = None
+        if self._cache is not None and not history:
+            cache_key = CacheService.build_key(
+                _RESPONSE_CACHE_NAMESPACE, str(knowledge_base_id), content
+            )
+            cached_response = await self._cache.get(cache_key)
+
+        if cached_response is not None:
+            logger.info("RAG response cache hit", extra={"conversation_id": str(conversation.id)})
+            assistant_message = await self.message_repo.create(
+                Message(
+                    conversation_id=conversation.id,
+                    role=MessageRole.ASSISTANT,
+                    content=cached_response["content"],
+                )
+            )
+            return user_message, assistant_message, cached_response["sources"]
 
         chunks_with_source = await self._retrieve_context(
             knowledge_base_id=knowledge_base_id, query=content
@@ -159,11 +172,32 @@ class ConversationService:
 
         cited_filenames = sorted({item.source_filename for item in chunks_with_source})
 
+        if self._cache is not None and cache_key is not None:
+            await self._cache.set(
+                cache_key,
+                {"content": llm_response.content, "sources": cited_filenames},
+                ttl_seconds=self._response_cache_ttl_seconds,
+            )
+
         logger.info(
             "Generated conversation reply",
             extra={"conversation_id": str(conversation.id), "model": llm_response.model_name},
         )
         return user_message, assistant_message, cited_filenames
+
+
+    async def invalidate_response_cache(self, *, knowledge_base_id: uuid.UUID) -> None:
+        """Clear all cached RAG responses for a knowledge base.
+
+        Called by DocumentService whenever a document is uploaded or
+        deleted (see document_service.py changes below) — ensures users
+        never get a stale cached answer that doesn't reflect their
+        knowledge base's current content, without waiting for the TTL.
+        """
+        if self._cache is not None:
+            await self._cache.delete_by_prefix(
+                CacheService.build_key(_RESPONSE_CACHE_NAMESPACE, str(knowledge_base_id), "")
+            )
 
     async def _retrieve_context(
         self, *, knowledge_base_id: uuid.UUID, query: str
