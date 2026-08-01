@@ -17,6 +17,8 @@ from typing import Any
 
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
+from app.observability.metrics import cache_operations_total
+
 
 logger = logging.getLogger(__name__)
 
@@ -37,32 +39,32 @@ class CacheService:
         self._enabled = enabled
 
     async def get(self, key: str) -> Any | None:
-        """Fetch a cached value, or None if missing/expired/unavailable.
-
-        Args:
-            key: the cache key (see `build_key` for constructing one).
-
-        Returns:
-            The deserialized JSON value, or None on a cache miss OR if
-            Redis itself is unreachable (fail-open).
-        """
+        """Fetch a cached value, or None if missing/expired/unavailable."""
         if not self._enabled:
             return None
+
+        namespace = key.split(":")[0] if ":" in key else "unknown"
 
         try:
             raw_value = await self._redis.get(key)
         except RedisError as exc:
             logger.warning("Cache read failed, treating as miss", extra={"error": str(exc)})
+            cache_operations_total.labels(namespace=namespace, result="error").inc()
             return None
 
         if raw_value is None:
+            cache_operations_total.labels(namespace=namespace, result="miss").inc()
             return None
 
         try:
-            return json.loads(raw_value)
+            value = json.loads(raw_value)
+            cache_operations_total.labels(namespace=namespace, result="hit").inc()
+            return value
         except json.JSONDecodeError:
             logger.warning("Cached value was not valid JSON, ignoring", extra={"key": key})
+            cache_operations_total.labels(namespace=namespace, result="error").inc()
             return None
+        
 
     async def set(self, key: str, value: Any, *, ttl_seconds: int) -> None:
         """Store a JSON-serializable value with a time-to-live.

@@ -25,10 +25,14 @@ from app.retrieval.hybrid_retriever import HybridRetriever
 from app.retrieval.reranking_service import RerankingService
 from app.services.knowledge_base_service import KnowledgeBaseService
 from app.core.cache import CacheService
+from app.observability.metrics import rag_pipeline_stage_duration_seconds, rag_queries_total
+from app.observability.tracing import get_tracer
+
 
 _RESPONSE_CACHE_NAMESPACE = "rag_response"
 
 logger = logging.getLogger(__name__)
+tracer = get_tracer(__name__)
 
 
 class ConversationService:
@@ -143,6 +147,7 @@ class ConversationService:
 
         if cached_response is not None:
             logger.info("RAG response cache hit", extra={"conversation_id": str(conversation.id)})
+            rag_queries_total.labels(cache_status="hit").inc()
             assistant_message = await self.message_repo.create(
                 Message(
                     conversation_id=conversation.id,
@@ -152,15 +157,19 @@ class ConversationService:
             )
             return user_message, assistant_message, cached_response["sources"]
 
+        rag_queries_total.labels(cache_status="miss").inc()
         chunks_with_source = await self._retrieve_context(
             knowledge_base_id=knowledge_base_id, query=content
         )
+
 
         prompt = self.prompt_builder.build(
             query=content, chunks=chunks_with_source, conversation_history=history
         )
 
-        llm_response = await self.llm_service.chat(prompt.messages)
+        with tracer.start_as_current_span("rag.llm_generation"):
+            with rag_pipeline_stage_duration_seconds.labels(stage="llm").time():
+                llm_response = await self.llm_service.chat(prompt.messages)
 
         assistant_message = await self.message_repo.create(
             Message(
@@ -203,7 +212,12 @@ class ConversationService:
         self, *, knowledge_base_id: uuid.UUID, query: str
     ) -> list[ChunkWithSource]:
         """Run the full retrieval pipeline (hybrid -> rerank -> compress)
-        and attach source filenames for prompt building."""
+        and attach source filenames for prompt building.
+
+        Each stage is wrapped in its own OpenTelemetry span and timed as a
+        Prometheus histogram, so slow stages are immediately visible in
+        both traces and dashboards.
+        """
         all_chunks = await self.chunk_repo.list_for_knowledge_base(knowledge_base_id)
         bm25_documents = [
             BM25Document(
@@ -215,20 +229,28 @@ class ConversationService:
             for c in all_chunks
         ]
 
-        candidates = await self.hybrid_retriever.retrieve(
-            knowledge_base_id=knowledge_base_id,
-            query=query,
-            bm25_documents=bm25_documents,
-            top_k=self.retrieval_top_k,
-        )
-        ranked = await self.reranking_service.rerank(
-            query=query, candidates=candidates, top_k=self.rerank_top_k
-        )
-        compressed = await self.context_compressor.compress(
-            ranked,
-            similarity_threshold=self.similarity_threshold,
-            max_context_tokens=self.max_context_tokens,
-        )
+        with tracer.start_as_current_span("rag.retrieval"):
+            with rag_pipeline_stage_duration_seconds.labels(stage="retrieval").time():
+                candidates = await self.hybrid_retriever.retrieve(
+                    knowledge_base_id=knowledge_base_id,
+                    query=query,
+                    bm25_documents=bm25_documents,
+                    top_k=self.retrieval_top_k,
+                )
+
+        with tracer.start_as_current_span("rag.rerank"):
+            with rag_pipeline_stage_duration_seconds.labels(stage="rerank").time():
+                ranked = await self.reranking_service.rerank(
+                    query=query, candidates=candidates, top_k=self.rerank_top_k
+                )
+
+        with tracer.start_as_current_span("rag.compress"):
+            with rag_pipeline_stage_duration_seconds.labels(stage="compress").time():
+                compressed = await self.context_compressor.compress(
+                    ranked,
+                    similarity_threshold=self.similarity_threshold,
+                    max_context_tokens=self.max_context_tokens,
+                )
 
         document_filenames = await self._resolve_document_filenames(
             {c.document_id for c in compressed}
@@ -237,6 +259,7 @@ class ConversationService:
             ChunkWithSource(c, document_filenames.get(c.document_id, "unknown document"))
             for c in compressed
         ]
+    
 
     async def _resolve_document_filenames(
         self, document_ids: set[uuid.UUID]

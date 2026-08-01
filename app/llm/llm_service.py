@@ -18,6 +18,10 @@ from tenacity import (
 
 from app.llm.base import ChatMessage, LLMProvider, LLMResponse
 from app.llm.exceptions import AllLLMProvidersFailedError, LLMError
+from app.observability.langfuse_client import LangfuseTracer
+from app.observability.metrics import llm_requests_total, llm_tokens_total
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -33,48 +37,48 @@ class LLMService:
         fallback_provider: LLMProvider,
         *,
         max_retries: int,
+        langfuse_tracer: LangfuseTracer | None = None,
     ) -> None:
-        """Store the two providers and retry configuration.
+        """... (existing docstring, extended)
 
         Args:
-            primary_provider: tried first (with retries) for every request.
-            fallback_provider: used only if the primary provider fails
-                after all retries are exhausted.
-            max_retries: how many times to retry the PRIMARY provider on
-                transient failures before falling back.
+            langfuse_tracer: optional LLM tracing — if None, generations
+                simply aren't recorded (keeps LLMService usable in tests
+                without any observability infrastructure).
         """
         self.primary_provider = primary_provider
         self.fallback_provider = fallback_provider
         self._max_retries = max_retries
+        self._langfuse = langfuse_tracer
+
 
     async def chat(self, messages: list[ChatMessage]) -> LLMResponse:
-        """Generate a complete response, retrying and falling back as needed.
-
-        Args:
-            messages: the full conversation to send.
-
-        Returns:
-            An LLMResponse — check `.model_name` to see which model
-            actually produced it.
-
-        Raises:
-            AllLLMProvidersFailedError: if both providers fail.
-        """
+        """Generate a complete response, retrying and falling back as needed."""
         try:
-            return await self._call_with_retry(self.primary_provider.chat, messages)
+            response = await self._call_with_retry(self.primary_provider.chat, messages)
+            self._record_observability(messages, response, outcome="success")
+            return response
         except LLMError as exc:
             logger.warning(
                 "Primary LLM provider failed after retries, falling back",
                 extra={"primary_model": self.primary_provider.model_name, "error": str(exc)},
             )
+            llm_requests_total.labels(
+                model=self.primary_provider.model_name, outcome="failure"
+            ).inc()
 
         try:
-            return await self.fallback_provider.chat(messages)
+            response = await self.fallback_provider.chat(messages)
+            self._record_observability(messages, response, outcome="fallback")
+            return response
         except LLMError as exc:
             logger.error(
                 "Fallback LLM provider also failed",
                 extra={"fallback_model": self.fallback_provider.model_name, "error": str(exc)},
             )
+            llm_requests_total.labels(
+                model=self.fallback_provider.model_name, outcome="failure"
+            ).inc()
             raise AllLLMProvidersFailedError(
                 "Both primary and fallback LLM providers failed to generate a response."
             ) from exc
@@ -138,6 +142,32 @@ class LLMService:
             reraise=True,
         )
         return await retrying(func)(messages)
+
+
+    def _record_observability(
+        self, messages: list[ChatMessage], response: LLMResponse, *, outcome: str
+    ) -> None:
+        """Record metrics and (if configured) a Langfuse generation trace."""
+        llm_requests_total.labels(model=response.model_name, outcome=outcome).inc()
+        llm_tokens_total.labels(model=response.model_name, token_type="input").inc(
+            response.input_tokens
+        )
+        llm_tokens_total.labels(model=response.model_name, token_type="output").inc(
+            response.output_tokens
+        )
+
+        if self._langfuse is not None:
+            self._langfuse.trace_generation(
+                name="rag_answer",
+                model=response.model_name,
+                input_messages=[{"role": m.role.value, "content": m.content} for m in messages],
+                output=response.content,
+                input_tokens=response.input_tokens,
+                output_tokens=response.output_tokens,
+                metadata={"outcome": outcome},
+            )
+
+
 
     @property
     def is_using_fallback_model(self) -> bool:

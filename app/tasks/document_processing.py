@@ -33,6 +33,8 @@ from app.retrieval.exceptions import VectorStoreError
 from app.retrieval.qdrant_store import QdrantVectorStore
 from app.storage.local_storage import LocalFileStorage
 from app.workers.celery_app import celery_app
+from app.observability.metrics import documents_processed_total
+
 
 logger = logging.getLogger(__name__)
 
@@ -197,6 +199,7 @@ async def _process_document_async(task: DocumentProcessingTask, document_id: uui
 
             await document_repo.update_status(document_id, DocumentStatus.READY)
             await session.commit()
+            documents_processed_total.labels(status="ready").inc()
 
             logger.info(
                 "Document processed successfully",
@@ -211,6 +214,7 @@ async def _process_document_async(task: DocumentProcessingTask, document_id: uui
                 document_id, DocumentStatus.FAILED, error_message=str(exc)
             )
             await session.commit()
+            documents_processed_total.labels(status="failed").inc()
             logger.warning(
                 "Document processing failed permanently",
                 extra={"document_id": str(document_id), "error": str(exc)},
@@ -234,6 +238,7 @@ async def _process_document_async(task: DocumentProcessingTask, document_id: uui
                     error_message=f"Processing failed after {task.request.retries} retries: {exc}",
                 )
                 await session.commit()
+                documents_processed_total.labels(status="failed").inc()
                 return
             raise task.retry(
                 exc=exc, countdown=settings.CELERY_TASK_RETRY_BACKOFF_SECONDS
@@ -248,6 +253,7 @@ async def _process_document_async(task: DocumentProcessingTask, document_id: uui
                 document_id, DocumentStatus.FAILED, error_message=str(exc)
             )
             await session.commit()
+            documents_processed_total.labels(status="failed").inc()
             logger.error(
                 "Document processing failed with an unexpected application error",
                 extra={"document_id": str(document_id), "error": str(exc)},
