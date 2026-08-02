@@ -66,6 +66,10 @@ from app.guardrails.guardrail_service import GuardrailService
 from app.guardrails.output_validation import OutputValidationGuardrail
 from app.guardrails.prompt_injection import PromptInjectionGuardrail
 
+from app.core.exceptions import AuthorizationError
+from app.models.user import UserRole
+from app.services.admin_service import AdminService
+
 
 
 # oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{get_settings().API_V1_PREFIX}/auth/login")
@@ -451,3 +455,33 @@ def get_document_service(
     )
 
 
+async def require_admin(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """Require the authenticated user to have the admin role.
+
+    Composes get_current_user, so admin routes get authentication AND
+    authorization by depending on this one function.
+
+    Returns:
+        The authenticated admin user.
+
+    Raises:
+        AuthorizationError: if the user is authenticated but not an admin
+            (-> HTTP 403). We use 403 rather than 404 here because the
+            existence of admin endpoints isn't secret — telling a logged-in
+            user "you're not an admin" is honest and more useful than
+            pretending the route doesn't exist.
+    """
+    if current_user.role != UserRole.ADMIN:
+        raise AuthorizationError("This action requires administrator privileges")
+    return current_user
+
+
+def get_admin_service(
+    user_repo: Annotated[UserRepository, Depends(get_user_repository)],
+    kb_repo: Annotated[KnowledgeBaseRepository, Depends(get_knowledge_base_repository)],
+    document_repo: Annotated[DocumentRepository, Depends(get_document_repository)],
+) -> AdminService:
+    """Provide an AdminService with its repositories wired up."""
+    return AdminService(user_repo, kb_repo, document_repo)

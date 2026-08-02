@@ -6,8 +6,7 @@ from sqlalchemy import func, select
 
 from app.models.document import Document
 from app.repositories.base import BaseRepository
-from app.models.document import DocumentStatus  # add to imports at top
-
+from app.models.document import Document, DocumentStatus
 
 class DocumentRepository(BaseRepository[Document]):
     """Data access methods for documents."""
@@ -66,3 +65,35 @@ class DocumentRepository(BaseRepository[Document]):
         document.status = status
         document.error_message = error_message
         await self.update(document)
+
+
+
+    async def count_by_status(self) -> dict[str, int]:
+        """Count documents grouped by processing status, across all KBs."""
+        stmt = select(Document.status, func.count()).group_by(Document.status)
+        result = await self.session.execute(stmt)
+        return {status.value: count for status, count in result.all()}
+
+    async def list_by_status(
+        self, status: DocumentStatus, *, limit: int = 50, offset: int = 0
+    ) -> list[Document]:
+        """List documents with a given processing status, across all KBs.
+
+        Primarily used by admins to review failed documents and their
+        error messages.
+        """
+        stmt = (
+            select(Document)
+            .where(Document.status == status)
+            .order_by(Document.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def count_with_status(self, status: DocumentStatus) -> int:
+        """Count documents with a specific status, across all KBs."""
+        stmt = select(func.count()).select_from(Document).where(Document.status == status)
+        result = await self.session.execute(stmt)
+        return result.scalar_one()

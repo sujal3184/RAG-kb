@@ -53,3 +53,10 @@ class KnowledgeBaseRepository(BaseRepository[KnowledgeBase]):
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+
+    async def count_all(self) -> int:
+        """Count all knowledge bases across all users — admin-only view."""
+        stmt = select(func.count()).select_from(KnowledgeBase)
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
