@@ -40,7 +40,7 @@ dependencies = [
     "opentelemetry-instrumentation-sqlalchemy>=0.50b0",
     "opentelemetry-instrumentation-httpx>=0.50b0",
     "prometheus-client>=0.21.1",
-    "langfuse>=2.57.0",
+    "langfuse>=2.57.0,<3.0.0",
 ]
 [dependency-groups]
 dev = [

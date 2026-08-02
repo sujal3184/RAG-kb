@@ -62,6 +62,11 @@ from redis.asyncio import Redis
 
 from app.core.cache import CacheService
 
+from app.guardrails.guardrail_service import GuardrailService
+from app.guardrails.output_validation import OutputValidationGuardrail
+from app.guardrails.prompt_injection import PromptInjectionGuardrail
+
+
 
 # oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{get_settings().API_V1_PREFIX}/auth/login")
 http_bearer_scheme = HTTPBearer()
@@ -370,6 +375,25 @@ def get_reranking_service_instance(
 ) -> RerankingService:
     return RerankingService(reranker)
 
+@lru_cache
+def get_guardrail_service() -> GuardrailService:
+    """Provide a singleton GuardrailService.
+
+    Cached with lru_cache — guardrails hold only compiled regex patterns
+    (stateless, thread-safe), so one shared instance is correct and avoids
+    recompiling patterns on every request.
+    """
+    settings = get_settings()
+    return GuardrailService(
+        input_guardrails=[
+            PromptInjectionGuardrail(max_query_length=settings.GUARDRAILS_MAX_QUERY_LENGTH)
+        ],
+        output_guardrails=[
+            OutputValidationGuardrail(redact_pii=settings.GUARDRAILS_REDACT_PII_IN_OUTPUT)
+        ],
+        enabled=settings.GUARDRAILS_ENABLED,
+        block_on_input_violation=settings.GUARDRAILS_BLOCK_ON_INJECTION,
+    )
 
 def get_conversation_service(
     conversation_repo: Annotated[ConversationRepository, Depends(get_conversation_repository)],
@@ -384,6 +408,7 @@ def get_conversation_service(
     llm_service: Annotated[LLMService, Depends(get_llm_service)],
     cache: Annotated[CacheService, Depends(get_cache_service)],
     settings: Annotated[Settings, Depends(get_settings)],
+    guardrail_service: Annotated[GuardrailService, Depends(get_guardrail_service)],
 ) -> ConversationService:
     """Provide a fully-wired ConversationService, now with response caching."""
     return ConversationService(
@@ -404,6 +429,7 @@ def get_conversation_service(
         max_context_tokens=settings.MAX_CONTEXT_TOKENS,
         cache=cache,
         response_cache_ttl_seconds=settings.RAG_RESPONSE_CACHE_TTL_SECONDS,
+        guardrail_service=guardrail_service,
     )
 
 def get_document_service(

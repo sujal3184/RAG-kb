@@ -64,3 +64,11 @@ llm_tokens_total = Counter(
     "Total tokens consumed by LLM requests",
     labelnames=["model", "token_type"],  # token_type: input | output
 )
+
+# Add alongside the existing metrics:
+
+guardrail_checks_total = Counter(
+    "guardrail_checks_total",
+    "Total guardrail checks performed",
+    labelnames=["guardrail", "direction", "outcome"],  # direction: input|output
+)

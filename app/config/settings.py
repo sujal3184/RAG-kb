@@ -160,12 +160,17 @@ class Settings(BaseSettings):
 
     METRICS_ENABLED: bool = True
 
-    LANGFUSE_ENABLED: bool = False
+    LANGFUSE_ENABLED: bool = True
     LANGFUSE_PUBLIC_KEY: str = ""
     LANGFUSE_SECRET_KEY: str = ""
-    LANGFUSE_HOST: str = "http://langfuse:3000"
-    
+    LANGFUSE_HOST: str = "https://cloud.langfuse.com"
 
+    # --- Guardrails -----------------------------------------------------------
+    GUARDRAILS_ENABLED: bool = True
+    GUARDRAILS_BLOCK_ON_INJECTION: bool = True
+    GUARDRAILS_REDACT_PII_IN_OUTPUT: bool = True
+    GUARDRAILS_MAX_QUERY_LENGTH: int = 4000
+    
     @computed_field  # type: ignore[prop-decorator]
     @property
     def redis_url(self) -> str:

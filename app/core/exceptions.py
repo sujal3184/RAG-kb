@@ -28,3 +28,6 @@ class AuthenticationError(AppException):
 
 class AuthorizationError(AppException):
     """The user is logged in but not allowed to do this. (-> HTTP 403)"""
+
+class GuardrailViolationError(AppException):
+    """ Guardrails exception"""

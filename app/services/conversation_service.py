@@ -27,7 +27,7 @@ from app.services.knowledge_base_service import KnowledgeBaseService
 from app.core.cache import CacheService
 from app.observability.metrics import rag_pipeline_stage_duration_seconds, rag_queries_total
 from app.observability.tracing import get_tracer
-
+from app.guardrails.guardrail_service import GuardrailService
 
 _RESPONSE_CACHE_NAMESPACE = "rag_response"
 
@@ -56,6 +56,7 @@ class ConversationService:
         max_context_tokens: int,
         cache: CacheService | None = None,
         response_cache_ttl_seconds: int = 300,
+        guardrail_service: GuardrailService | None = None,
     ) -> None:
         """... (existing docstring, extended)
 
@@ -83,6 +84,7 @@ class ConversationService:
         self.max_context_tokens = max_context_tokens
         self._cache = cache
         self._response_cache_ttl_seconds = response_cache_ttl_seconds
+        self._guardrails = guardrail_service
 
     async def create_conversation(
         self, *, knowledge_base_id: uuid.UUID, owner_id: uuid.UUID, title: str | None
@@ -124,13 +126,24 @@ class ConversationService:
         owner_id: uuid.UUID,
         content: str,
     ) -> tuple[Message, Message, list[str]]:
-        """..."""
+        """Send a user message and generate a RAG-powered assistant reply.
+
+        Guardrails are applied on both sides: the user's query is checked
+        for prompt-injection attempts BEFORE any processing (so malicious
+        input never reaches the LLM or costs us tokens), and the LLM's
+        response is validated/sanitized before being persisted or returned.
+
+        Raises:
+            GuardrailViolationError: if the query fails an input guardrail
+                and blocking is enabled.
+            NotFoundError: if the KB or conversation doesn't exist/isn't owned.
+        """
+        if self._guardrails is not None:
+            self._guardrails.check_input(content)
+
         await self.kb_service.get(kb_id=knowledge_base_id, owner_id=owner_id)
         conversation = await self._get_conversation_or_404(conversation_id, knowledge_base_id)
 
-        # Load history BEFORE saving the new user message, so "history" truly
-        # reflects prior turns only — otherwise the just-created message would
-        # always make history non-empty, permanently disabling response caching.
         history = await self._load_conversation_history(conversation.id)
 
         user_message = await self.message_repo.create(
@@ -158,10 +171,10 @@ class ConversationService:
             return user_message, assistant_message, cached_response["sources"]
 
         rag_queries_total.labels(cache_status="miss").inc()
+
         chunks_with_source = await self._retrieve_context(
             knowledge_base_id=knowledge_base_id, query=content
         )
-
 
         prompt = self.prompt_builder.build(
             query=content, chunks=chunks_with_source, conversation_history=history
@@ -171,11 +184,15 @@ class ConversationService:
             with rag_pipeline_stage_duration_seconds.labels(stage="llm").time():
                 llm_response = await self.llm_service.chat(prompt.messages)
 
+        answer_text = llm_response.content
+        if self._guardrails is not None:
+            answer_text = self._guardrails.check_output(answer_text)
+
         assistant_message = await self.message_repo.create(
             Message(
                 conversation_id=conversation.id,
                 role=MessageRole.ASSISTANT,
-                content=llm_response.content,
+                content=answer_text,
             )
         )
 
@@ -184,7 +201,7 @@ class ConversationService:
         if self._cache is not None and cache_key is not None:
             await self._cache.set(
                 cache_key,
-                {"content": llm_response.content, "sources": cited_filenames},
+                {"content": answer_text, "sources": cited_filenames},
                 ttl_seconds=self._response_cache_ttl_seconds,
             )
 
@@ -193,6 +210,7 @@ class ConversationService:
             extra={"conversation_id": str(conversation.id), "model": llm_response.model_name},
         )
         return user_message, assistant_message, cited_filenames
+    
 
 
     async def invalidate_response_cache(self, *, knowledge_base_id: uuid.UUID) -> None:
