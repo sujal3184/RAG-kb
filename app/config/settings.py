@@ -170,6 +170,28 @@ class Settings(BaseSettings):
     GUARDRAILS_BLOCK_ON_INJECTION: bool = True
     GUARDRAILS_REDACT_PII_IN_OUTPUT: bool = True
     GUARDRAILS_MAX_QUERY_LENGTH: int = 4000
+
+    # --- Rate limiting --------------------------------------------------------
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_REQUESTS_PER_MINUTE: int = 60
+    RATE_LIMIT_AUTH_REQUESTS_PER_MINUTE: int = 10  # stricter for login/register
+
+    # --- Security -------------------------------------------------------------
+    SECURITY_HEADERS_ENABLED: bool = True
+    # If set, /metrics requires this bearer token. Leave empty to allow
+    # unauthenticated access (only acceptable when /metrics is restricted
+    # at the network layer — see DEPLOYMENT.md).
+    METRICS_AUTH_TOKEN: str = ""
+    # Comma-separated allowed CORS origins. Empty means no CORS headers.
+    CORS_ALLOWED_ORIGINS: str = ""
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        """Parse the comma-separated CORS origins into a list."""
+        if not self.CORS_ALLOWED_ORIGINS.strip():
+            return []
+        return [o.strip() for o in self.CORS_ALLOWED_ORIGINS.split(",") if o.strip()]
+    
     
     @computed_field  # type: ignore[prop-decorator]
     @property

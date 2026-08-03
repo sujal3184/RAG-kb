@@ -23,25 +23,28 @@ async def _register_and_login(client: AsyncClient, email: str) -> str:
     return response.json()["access_token"]
 
 
-async def _make_admin(client: AsyncClient, email: str) -> str:
-    """Register a user, promote them to admin directly in the database,
-    then log in and return their token."""
-    from app.db.session import async_session_factory
+async def _make_admin(client: AsyncClient, db_session, email: str) -> str:
+    """Register a user, promote them to admin within the TEST's session,
+    then log in and return their token.
 
+    Must use db_session (not a fresh session) so the promotion is visible
+    to API requests, which share the test's transaction via the app
+    fixture's dependency override.
+    """
     await client.post(
         "/api/v1/auth/register", json={"email": email, "password": "correcthorse123"}
     )
 
-    async with async_session_factory() as session:
-        result = await session.execute(select(User).where(User.email == email))
-        user = result.scalar_one()
-        user.role = UserRole.ADMIN
-        await session.commit()
+    result = await db_session.execute(select(User).where(User.email == email))
+    user = result.scalar_one()
+    user.role = UserRole.ADMIN
+    await db_session.flush()
 
     response = await client.post(
         "/api/v1/auth/login", json={"email": email, "password": "correcthorse123"}
     )
     return response.json()["access_token"]
+
 
 
 def _headers(token: str) -> dict[str, str]:
@@ -66,8 +69,8 @@ async def test_unauthenticated_request_is_rejected(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_admin_can_view_system_stats(client: AsyncClient) -> None:
-    token = await _make_admin(client, f"admin_{uuid.uuid4()}@example.com")
+async def test_admin_can_view_system_stats(client: AsyncClient, db_session) -> None:
+    token = await _make_admin(client, db_session, f"admin_{uuid.uuid4()}@example.com")
 
     response = await client.get("/api/v1/admin/stats", headers=_headers(token))
 
@@ -78,8 +81,8 @@ async def test_admin_can_view_system_stats(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_admin_can_list_users(client: AsyncClient) -> None:
-    token = await _make_admin(client, f"admin_{uuid.uuid4()}@example.com")
+async def test_admin_can_list_users(client: AsyncClient, db_session) -> None:
+    token = await _make_admin(client, db_session, f"admin_{uuid.uuid4()}@example.com")
 
     response = await client.get("/api/v1/admin/users", headers=_headers(token))
 
@@ -90,8 +93,8 @@ async def test_admin_can_list_users(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_admin_can_deactivate_another_user(client: AsyncClient) -> None:
-    admin_token = await _make_admin(client, f"admin_{uuid.uuid4()}@example.com")
+async def test_admin_can_deactivate_another_user(client: AsyncClient, db_session) -> None:
+    admin_token = await _make_admin(client, db_session, f"admin_{uuid.uuid4()}@example.com")
     target_email = f"target_{uuid.uuid4()}@example.com"
     await _register_and_login(client, target_email)
 
@@ -111,9 +114,9 @@ async def test_admin_can_deactivate_another_user(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_deactivated_user_cannot_log_in(client: AsyncClient) -> None:
+async def test_deactivated_user_cannot_log_in(client: AsyncClient, db_session) -> None:
     """Deactivation should actually block access, not just set a flag."""
-    admin_token = await _make_admin(client, f"admin_{uuid.uuid4()}@example.com")
+    admin_token = await _make_admin(client, db_session, f"admin_{uuid.uuid4()}@example.com")
     target_email = f"target_{uuid.uuid4()}@example.com"
     await _register_and_login(client, target_email)
 
@@ -135,10 +138,10 @@ async def test_deactivated_user_cannot_log_in(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_admin_cannot_deactivate_themselves(client: AsyncClient) -> None:
+async def test_admin_cannot_deactivate_themselves(client: AsyncClient, db_session) -> None:
     """Prevents an admin locking themselves out of the system."""
     admin_email = f"admin_{uuid.uuid4()}@example.com"
-    admin_token = await _make_admin(client, admin_email)
+    admin_token = await _make_admin(client, db_session, admin_email)
 
     users_response = await client.get("/api/v1/admin/users", headers=_headers(admin_token))
     own_id = next(
@@ -155,8 +158,8 @@ async def test_admin_cannot_deactivate_themselves(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_admin_can_list_failed_documents(client: AsyncClient) -> None:
-    token = await _make_admin(client, f"admin_{uuid.uuid4()}@example.com")
+async def test_admin_can_list_failed_documents(client: AsyncClient, db_session) -> None:
+    token = await _make_admin(client, db_session, f"admin_{uuid.uuid4()}@example.com")
 
     response = await client.get(
         "/api/v1/admin/documents?status=failed", headers=_headers(token)

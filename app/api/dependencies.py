@@ -73,7 +73,7 @@ from app.services.admin_service import AdminService
 
 
 # oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{get_settings().API_V1_PREFIX}/auth/login")
-http_bearer_scheme = HTTPBearer()
+http_bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def get_user_repository(
@@ -119,10 +119,20 @@ def get_auth_service(
 
 
 async def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(http_bearer_scheme)],
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(http_bearer_scheme)],
     user_repo: Annotated[UserRepository, Depends(get_user_repository)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> User:
+    """Resolve the currently authenticated user from the request's JWT.
+
+    With auto_error=False, a missing Authorization header arrives here as
+    None rather than HTTPBearer raising 403 — letting us return 401,
+    which correctly means "no credentials" (403 means "credentials fine,
+    but not allowed").
+    """
+    if credentials is None:
+        raise AuthenticationError("Authentication credentials were not provided")
+
     token = credentials.credentials
     payload = decode_token(token, expected_type=TokenType.ACCESS, settings=settings)
 

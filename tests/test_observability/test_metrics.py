@@ -3,16 +3,39 @@
 import pytest
 from httpx import AsyncClient
 
+from app.config.settings import get_settings
 from app.observability.metrics import cache_operations_total, rag_queries_total
+
+
+def _metrics_headers() -> dict[str, str]:
+    """Build auth headers for /metrics if a token is configured.
+
+    The endpoint is token-protected when METRICS_AUTH_TOKEN is set, so
+    tests must present it — reading from settings keeps the test working
+    whether or not a token is configured in this environment.
+    """
+    token = get_settings().METRICS_AUTH_TOKEN
+    return {"Authorization": f"Bearer {token}"} if token else {}
 
 
 @pytest.mark.asyncio
 async def test_metrics_endpoint_is_exposed(client: AsyncClient) -> None:
     """The /metrics endpoint should return Prometheus-format metrics."""
-    response = await client.get("/metrics")
+    response = await client.get("/metrics", headers=_metrics_headers())
 
     assert response.status_code == 200
     assert "http_requests_total" in response.text
+
+
+@pytest.mark.asyncio
+async def test_metrics_rejects_missing_token(client: AsyncClient) -> None:
+    """When a token is configured, /metrics must reject unauthenticated access."""
+    if not get_settings().METRICS_AUTH_TOKEN:
+        pytest.skip("No METRICS_AUTH_TOKEN configured in this environment")
+
+    response = await client.get("/metrics")
+
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -38,7 +61,7 @@ async def test_http_metrics_are_recorded(client: AsyncClient) -> None:
     """Making a request should increment the HTTP request counter."""
     await client.get("/api/v1/health")
 
-    metrics_response = await client.get("/metrics")
+    metrics_response = await client.get("/metrics", headers=_metrics_headers())
 
     assert "http_requests_total" in metrics_response.text
     assert "/api/v1/health" in metrics_response.text
