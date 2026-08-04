@@ -1,0 +1,132 @@
+{
+  "name": "ml_notes_v1",
+  "knowledge_base_id": "117fe02e-4a32-4f6c-afd6-aab5ad94f45a",
+  "examples": [
+    {
+      "question": "What textbook is recommended for this Machine Learning course?",
+      "relevant_chunk_ids": ["16e9f151-ae29-44d8-b9b4-9ea55bd7c4ad"],
+      "reference_answer": "Machine Learning by Tom M. Mitchell, published by MGH, is one of the recommended textbooks.",
+      "metadata": {"type": "factual", "difficulty": "easy"}
+    },
+    {
+      "question": "What is covered in Unit V of the syllabus?",
+      "relevant_chunk_ids": ["7b9fa6d6-c38c-4445-b2a3-b3c9597aa08e", "37475689-b587-4a09-ba87-90558df68d8f"],
+      "reference_answer": "Unit V covers Genetic Algorithms, different search methods for induction, and Explanation-based Learning.",
+      "metadata": {"type": "factual", "difficulty": "medium"}
+    },
+    {
+      "question": "What is the FIND-S algorithm and how does it work?",
+      "relevant_chunk_ids": ["c4b68f8d-e229-48e2-89e7-9a00d8af43c3", "53c27a87-15f5-49b2-8eeb-add11cc67b6d"],
+      "reference_answer": "FIND-S starts from the most specific hypothesis and generalizes it by considering only positive training examples.",
+      "metadata": {"type": "conceptual", "difficulty": "medium"}
+    },
+    {
+      "question": "What does the Candidate-Elimination algorithm compute?",
+      "relevant_chunk_ids": ["c8717596-0233-49f9-a7c4-b8114ba46e87"],
+      "reference_answer": "It computes the version space containing all hypotheses from H that are consistent with the observed training examples.",
+      "metadata": {"type": "conceptual", "difficulty": "medium"}
+    },
+    {
+      "question": "How is ID3 different from Candidate-Elimination in terms of hypothesis space search?",
+      "relevant_chunk_ids": ["c87c07a3-641d-449b-aac0-8905890d2d65"],
+      "reference_answer": "ID3 searches a complete hypothesis space incompletely, while Candidate-Elimination searches an incomplete hypothesis space completely.",
+      "metadata": {"type": "comparison", "difficulty": "hard"}
+    },
+    {
+      "question": "What year did Minsky and Papert show a key limitation of the Perceptron, and what was it?",
+      "relevant_chunk_ids": ["a1bbb766-cf38-4ba5-af06-bca887a2bc3e"],
+      "reference_answer": "In 1969, Minsky and Papert showed that the Perceptron cannot deal with nonlinearly-separable data sets.",
+      "metadata": {"type": "factual", "difficulty": "medium"}
+    },
+    {
+      "question": "What are the two types of back propagation networks mentioned in the notes?",
+      "relevant_chunk_ids": ["13fdd98a-188a-4fa1-ab99-5fcb5b6f01f6"],
+      "reference_answer": "Static Back-propagation and Recurrent Back-propagation.",
+      "metadata": {"type": "factual", "difficulty": "easy"}
+    },
+    {
+      "question": "In Bayesian learning, what is Maximum Likelihood Estimation (MLE)?",
+      "relevant_chunk_ids": ["a133b857-d6d8-456a-87ed-b99e3f997ee2"],
+      "reference_answer": "MLE is a method where the likelihood function indicates how likely the observed sample is as a function of possible parameter values.",
+      "metadata": {"type": "conceptual", "difficulty": "medium"}
+    },
+    {
+      "question": "What is Naive Bayes Classifier mainly used for?",
+      "relevant_chunk_ids": ["e52a391d-da09-4c7b-a4e6-e4fbed0aa663"],
+      "reference_answer": "It is mainly used in text classification involving high-dimensional training datasets.",
+      "metadata": {"type": "factual", "difficulty": "easy"}
+    },
+    {
+      "question": "What is the essence of the Expectation-Maximization algorithm?",
+      "relevant_chunk_ids": ["cc10289a-d035-4781-bbcc-334b1e9301c1"],
+      "reference_answer": "It uses the available observed data to estimate the missing data, then uses that complete data to update parameter estimates.",
+      "metadata": {"type": "conceptual", "difficulty": "hard"}
+    },
+    {
+      "question": "How does the K-Nearest Neighbor algorithm classify a new data point?",
+      "relevant_chunk_ids": ["6eae4edb-cc3b-44a4-a046-b80686184e03", "e5d1129e-d402-4895-b037-faaa219240dc"],
+      "reference_answer": "KNN calculates the distance between the test data and each row of training data (e.g. using Euclidean distance) and classifies based on the nearest neighbors.",
+      "metadata": {"type": "conceptual", "difficulty": "medium"}
+    },
+    {
+      "question": "What does DBSCAN stand for and how does it cluster data?",
+      "relevant_chunk_ids": ["8fb40bd2-e6b3-468e-95e7-9534a1a22ab8"],
+      "reference_answer": "DBSCAN stands for Density-based Spatial Clustering of Applications with Noise; it clusters data points based on density.",
+      "metadata": {"type": "factual", "difficulty": "medium"}
+    },
+    {
+      "question": "What is Dynamic Time Warping (DTW) used for?",
+      "relevant_chunk_ids": ["4a7c6a94-266a-46ec-9fbe-8540460ad9b8", "d29da34b-aee4-49ed-9c11-527cea1e3dc4"],
+      "reference_answer": "DTW measures similarity between two temporal sequences that may vary in speed, finding an optimal match between them.",
+      "metadata": {"type": "conceptual", "difficulty": "medium"}
+    },
+    {
+      "question": "What are the two components of dimensionality reduction?",
+      "relevant_chunk_ids": ["91c942ce-2e69-44ed-8aa0-11a5b13ee24f"],
+      "reference_answer": "Feature selection and feature extraction.",
+      "metadata": {"type": "factual", "difficulty": "easy"}
+    },
+    {
+      "question": "What does the Manifold Hypothesis state?",
+      "relevant_chunk_ids": ["5a83bb88-ef5b-4895-9d35-cc85b54a2c82"],
+      "reference_answer": "It states that real-world high-dimensional data lie on low-dimensional manifolds embedded within the higher-dimensional space.",
+      "metadata": {"type": "conceptual", "difficulty": "medium"}
+    },
+    {
+      "question": "What is Vector Quantization Learning (LVQ) inspired by?",
+      "relevant_chunk_ids": ["7d7e2cff-e3f3-4e74-b791-4405bc43fb4a"],
+      "reference_answer": "LVQ is a type of Artificial Neural Network inspired by biological neural systems.",
+      "metadata": {"type": "factual", "difficulty": "easy"}
+    },
+    {
+      "question": "What is reinforcement learning, based on the checkers example in the notes?",
+      "relevant_chunk_ids": ["037f6690-d51f-40af-801c-114439d4579b"],
+      "reference_answer": "Reinforcement learning is illustrated through a checkers-playing example where the system learns through direct or indirect training experience.",
+      "metadata": {"type": "conceptual", "difficulty": "medium"}
+    },
+    {
+      "question": "What is Genetic Algorithm, as described in Unit V?",
+      "relevant_chunk_ids": ["37475689-b587-4a09-ba87-90558df68d8f"],
+      "reference_answer": "Genetic Algorithms are adaptive heuristic search algorithms belonging to a larger part of evolutionary algorithms.",
+      "metadata": {"type": "factual", "difficulty": "easy"}
+    },
+    {
+      "question": "Who is Sujal Singh?",
+      "relevant_chunk_ids": ["9d43f85c-0a67-4e87-9743-59f28c3cb7f9"],
+      "reference_answer": "The document does not identify who Sujal Singh is beyond a brief mention.",
+      "metadata": {"type": "factual", "difficulty": "easy", "note": "tests whether the unrelated second document is retrieved correctly"}
+    },
+    {
+      "question": "What is the exact GDP growth rate of India mentioned in these notes?",
+      "relevant_chunk_ids": [],
+      "reference_answer": "The documents do not contain any information about India's GDP growth rate.",
+      "metadata": {"type": "negative", "difficulty": "medium", "note": "tests groundedness - system should refuse to answer, not hallucinate"}
+    },
+    {
+      "question": "What programming language is used to implement the neural networks discussed?",
+      "relevant_chunk_ids": [],
+      "reference_answer": "The documents do not specify any programming language used for implementation.",
+      "metadata": {"type": "negative", "difficulty": "medium", "note": "tests groundedness"}
+    }
+  ]
+}

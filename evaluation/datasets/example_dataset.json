@@ -1,0 +1,18 @@
+{
+  "name": "example",
+  "knowledge_base_id": "REPLACE_WITH_YOUR_KB_UUID",
+  "examples": [
+    {
+      "question": "What is the capital of France?",
+      "relevant_chunk_ids": ["REPLACE_WITH_CHUNK_UUID"],
+      "reference_answer": "Paris is the capital of France.",
+      "metadata": {"type": "factual", "difficulty": "easy"}
+    },
+    {
+      "question": "Where is the Eiffel Tower located?",
+      "relevant_chunk_ids": ["REPLACE_WITH_CHUNK_UUID"],
+      "reference_answer": "The Eiffel Tower is in Paris, France.",
+      "metadata": {"type": "factual", "difficulty": "easy"}
+    }
+  ]
+}

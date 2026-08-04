@@ -79,6 +79,6 @@ class BgeRerankerProvider(RerankerProvider):
         """Load the cross-encoder model on first use, then reuse it."""
         if self._model is None:
             logger.info("Loading reranker model", extra={"model": self._model_id})
-            self._model = CrossEncoder(self._model_id, cache_folder=self._cache_dir)
+            self._model = CrossEncoder(self._model_id, cache_dir=self._cache_dir)
             logger.info("Reranker model loaded", extra={"model": self._model_id})
         return self._model
