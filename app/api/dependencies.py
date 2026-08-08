@@ -243,6 +243,7 @@ def get_vector_store() -> VectorStore:
         host=settings.QDRANT_HOST,
         port=settings.QDRANT_PORT,
         collection_prefix=settings.QDRANT_COLLECTION_PREFIX,
+        api_key=settings.QDRANT_API_KEY or None,
     )
 
 

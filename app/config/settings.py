@@ -98,6 +98,7 @@ class Settings(BaseSettings):
     QDRANT_HOST: str = "qdrant"
     QDRANT_PORT: int = 6333
     QDRANT_COLLECTION_PREFIX: str = "kb_"
+    QDRANT_API_KEY: str = ""
     # How many results to fetch per search call by default (can be
     # overridden per-call by future retrieval logic in Module 11).
     QDRANT_DEFAULT_TOP_K: int = 10

@@ -15,7 +15,7 @@ class QdrantVectorStore(VectorStore):
     """Stores and searches vector embeddings using Qdrant, one collection
     per knowledge base."""
 
-    def __init__(self, host: str, port: int, *, collection_prefix: str) -> None:
+    def __init__(self, host: str, port: int, *, collection_prefix: str, api_key: str | None = None) -> None:
         """Set up the Qdrant client connection.
 
         Args:
@@ -23,10 +23,14 @@ class QdrantVectorStore(VectorStore):
             port: Qdrant server REST port.
             collection_prefix: prefix used when deriving collection names
                 from knowledge base ids (e.g. "kb_" -> "kb_<uuid>").
+            api_key: required for Qdrant Cloud (auth-protected); leave None
+                for local Docker Qdrant (no auth). When set, connections
+                automatically use HTTPS, since Qdrant Cloud requires it.
         """
-        self._client = AsyncQdrantClient(host=host, port=port)
+        self._client = AsyncQdrantClient(host=host, port=port, api_key=api_key, https=bool(api_key))
         self._collection_prefix = collection_prefix
 
+        
     def _collection_name(self, knowledge_base_id: uuid.UUID) -> str:
         """Derive a deterministic Qdrant collection name for a knowledge base."""
         return f"{self._collection_prefix}{knowledge_base_id}"
