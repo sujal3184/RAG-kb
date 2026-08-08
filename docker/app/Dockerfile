@@ -48,4 +48,4 @@ USER app
 EXPOSE 8000
 
 # In production, no --reload (that's a dev-only feature, added via override file).
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "ls -la /code/.venv/bin/ | head -30 && sleep 60"]
