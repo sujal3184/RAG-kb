@@ -28,6 +28,7 @@ from app.core.cache import CacheService
 from app.observability.metrics import rag_pipeline_stage_duration_seconds, rag_queries_total
 from app.observability.tracing import get_tracer
 from app.guardrails.guardrail_service import GuardrailService
+from collections.abc import AsyncIterator
 
 _RESPONSE_CACHE_NAMESPACE = "rag_response"
 
@@ -149,6 +150,10 @@ class ConversationService:
         user_message = await self.message_repo.create(
             Message(conversation_id=conversation.id, role=MessageRole.USER, content=content)
         )
+
+        if conversation.title is None:
+            conversation.title = content[:60] + ("..." if len(content) > 60 else "")
+            await self.conversation_repo.update(conversation)
 
         cached_response = None
         cache_key = None
@@ -312,3 +317,111 @@ class ConversationService:
         if conversation is None:
             raise NotFoundError("Conversation not found")
         return conversation
+
+
+    async def delete_conversation(
+        self, *, conversation_id: uuid.UUID, knowledge_base_id: uuid.UUID, owner_id: uuid.UUID
+    ) -> None:
+        """Delete a conversation and all its messages.
+
+        Raises:
+            NotFoundError: if it doesn't exist or isn't owned by this user.
+        """
+        await self.kb_service.get(kb_id=knowledge_base_id, owner_id=owner_id)
+        conversation = await self._get_conversation_or_404(conversation_id, knowledge_base_id)
+        await self.conversation_repo.delete(conversation)
+
+
+
+    async def send_message_streaming(
+        self,
+        *,
+        conversation_id: uuid.UUID,
+        knowledge_base_id: uuid.UUID,
+        owner_id: uuid.UUID,
+        content: str,
+    ) -> AsyncIterator[str]:
+        """Send a user message and stream the assistant's reply token-by-token.
+
+        Mirrors send_message's logic (guardrails, retrieval, prompt
+        building) but uses LLMService.stream_chat instead of chat, and
+        yields text chunks as they arrive instead of returning a complete
+        response. The full assembled response is still persisted and
+        cached at the end, exactly as the non-streaming path does.
+
+        Yields:
+            Successive text chunks of the generated answer.
+
+        Raises:
+            GuardrailViolationError: if the query fails an input guardrail.
+            NotFoundError: if the KB or conversation doesn't exist/isn't owned.
+        """
+        if self._guardrails is not None:
+            self._guardrails.check_input(content)
+
+        await self.kb_service.get(kb_id=knowledge_base_id, owner_id=owner_id)
+        conversation = await self._get_conversation_or_404(conversation_id, knowledge_base_id)
+
+        history = await self._load_conversation_history(conversation.id)
+
+        user_message = await self.message_repo.create(
+            Message(conversation_id=conversation.id, role=MessageRole.USER, content=content)
+        )
+
+        if conversation.title is None:
+            conversation.title = content[:60] + ("..." if len(content) > 60 else "")
+            await self.conversation_repo.update(conversation)
+
+        # Streaming responses are never served from cache — the point of
+        # streaming is showing progressive output, so a cache hit (which
+        # would arrive all at once anyway) doesn't need this code path.
+        # A cache WRITE still happens at the end, so a later non-streaming
+        # request to the same fresh conversation can still benefit.
+        cache_key = None
+        if self._cache is not None and not history:
+            cache_key = CacheService.build_key(
+                _RESPONSE_CACHE_NAMESPACE, str(knowledge_base_id), content
+            )
+
+        chunks_with_source = await self._retrieve_context(
+            knowledge_base_id=knowledge_base_id, query=content
+        )
+
+        prompt = self.prompt_builder.build(
+            query=content, chunks=chunks_with_source, conversation_history=history
+        )
+
+        full_response = ""
+        with tracer.start_as_current_span("rag.llm_generation_streaming"):
+            async for chunk in self.llm_service.stream_chat(prompt.messages):
+                full_response += chunk
+                yield chunk
+
+        answer_text = full_response
+        if self._guardrails is not None:
+            answer_text = self._guardrails.check_output(answer_text)
+            # If guardrail sanitization changed the text (e.g. redacted
+            # PII), the already-streamed raw chunks can't be un-sent to
+            # the client — but we still persist and cache the SANITIZED
+            # version, so history and future cache hits are clean even
+            # though this one response's stream showed the raw text.
+            # This is a known, deliberate trade-off of streaming +
+            # output guardrails together; flagged clearly here.
+
+        cited_filenames = sorted({item.source_filename for item in chunks_with_source})
+
+        await self.message_repo.create(
+            Message(conversation_id=conversation.id, role=MessageRole.ASSISTANT, content=answer_text)
+        )
+
+        if self._cache is not None and cache_key is not None:
+            await self._cache.set(
+                cache_key,
+                {"content": answer_text, "sources": cited_filenames},
+                ttl_seconds=self._response_cache_ttl_seconds,
+            )
+
+        logger.info(
+            "Generated streaming conversation reply",
+            extra={"conversation_id": str(conversation.id)},
+        )

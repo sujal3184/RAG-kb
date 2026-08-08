@@ -83,7 +83,7 @@ async def main(dataset_path: Path, *, retrieval_only: bool) -> None:
             llm_service,
             AnswerJudge(llm_service),
             retrieval_top_k=settings.HYBRID_TOP_K_PER_METHOD,
-            rerank_top_k=10,
+            rerank_top_k=5,
             similarity_threshold=settings.DEDUPLICATION_SIMILARITY_THRESHOLD,
             max_context_tokens=settings.MAX_CONTEXT_TOKENS,
         )

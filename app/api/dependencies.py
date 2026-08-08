@@ -70,7 +70,7 @@ from app.core.exceptions import AuthorizationError
 from app.models.user import UserRole
 from app.services.admin_service import AdminService
 
-
+from app.services.email.resend_email_sender import ResendEmailSender
 
 # oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{get_settings().API_V1_PREFIX}/auth/login")
 http_bearer_scheme = HTTPBearer(auto_error=False)
@@ -93,16 +93,22 @@ def get_verification_token_repository(
 ) -> VerificationTokenRepository:
     return VerificationTokenRepository(db)
 
-
-def get_email_sender() -> EmailSender:
+def get_email_sender(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> EmailSender:
     """Provide the email-sending implementation.
 
-    This is the ONE place to change when a real email provider is added
-    later — swap `ConsoleEmailSender()` for e.g. `SesEmailSender(settings)`,
-    and nothing else in the app needs to change.
+    Uses Resend if an API key is configured; otherwise falls back to
+    logging emails to the console (useful for local dev without needing
+    a real Resend account, or when RESEND_API_KEY is left unset).
     """
+    if settings.RESEND_API_KEY:
+        return ResendEmailSender(
+            settings.RESEND_API_KEY,
+            from_address=settings.EMAIL_FROM_ADDRESS,
+            from_name=settings.EMAIL_FROM_NAME,
+        )
     return ConsoleEmailSender()
-
 
 def get_auth_service(
     user_repo: Annotated[UserRepository, Depends(get_user_repository)],
@@ -438,7 +444,7 @@ def get_conversation_service(
         llm_service,
         max_history_messages=settings.MAX_CONVERSATION_HISTORY_MESSAGES,
         retrieval_top_k=settings.HYBRID_TOP_K_PER_METHOD,
-        rerank_top_k=10,
+        rerank_top_k=5,
         similarity_threshold=settings.DEDUPLICATION_SIMILARITY_THRESHOLD,
         max_context_tokens=settings.MAX_CONTEXT_TOKENS,
         cache=cache,
@@ -495,3 +501,5 @@ def get_admin_service(
 ) -> AdminService:
     """Provide an AdminService with its repositories wired up."""
     return AdminService(user_repo, kb_repo, document_repo)
+
+

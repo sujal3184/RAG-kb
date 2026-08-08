@@ -90,6 +90,14 @@ def create_app() -> FastAPI:
             allow_headers=["Authorization", "Content-Type"],
         )
 
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=False,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
     app.include_router(api_router, prefix=settings.API_V1_PREFIX)
     _add_error_handlers(app)
 

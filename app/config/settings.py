@@ -68,7 +68,7 @@ class Settings(BaseSettings):
 
      # Base URL of the (future) frontend, used to build links inside emails,
     # e.g. f"{FRONTEND_BASE_URL}/verify-email?token=xyz"
-    FRONTEND_BASE_URL: str = "http://localhost:3000"
+    FRONTEND_BASE_URL: str = "https://id-preview--7723c064-f8e8-44d2-bff0-3eef375a9c18.lovable.app"
 
     # --- File storage -------------------------------------------------------
     # Where uploaded files are stored on disk. Inside Docker this should be
@@ -184,6 +184,12 @@ class Settings(BaseSettings):
     METRICS_AUTH_TOKEN: str = ""
     # Comma-separated allowed CORS origins. Empty means no CORS headers.
     CORS_ALLOWED_ORIGINS: str = ""
+
+
+    # --- Email (Resend) -------------------------------------------------------
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM_ADDRESS: str = "onboarding@resend.dev"
+    EMAIL_FROM_NAME: str = "Knowledge Base RAG"
 
     @property
     def cors_origins_list(self) -> list[str]:
