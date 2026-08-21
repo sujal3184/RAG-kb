@@ -4,12 +4,7 @@ from app.llm.base import ChatMessage, MessageRole
 
 async def main():
     llm = get_llm_service()
-    try:
-        response = await llm.primary_provider.chat([
-            ChatMessage(role=MessageRole.USER, content='Say hello')
-        ])
-        print('OK:', response)
-    except Exception as exc:
-        print('FAILED:', repr(exc))
+    response = await llm.primary_provider.chat([ChatMessage(role=MessageRole.USER, content='Say hello')])
+    print(response)
 
 asyncio.run(main())

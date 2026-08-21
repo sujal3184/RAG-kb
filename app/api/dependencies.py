@@ -72,6 +72,9 @@ from app.services.admin_service import AdminService
 
 from app.services.email.resend_email_sender import ResendEmailSender
 
+from app.retrieval.cohere_reranker import CohereRerankerProvider
+
+
 # oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{get_settings().API_V1_PREFIX}/auth/login")
 http_bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -169,16 +172,22 @@ def get_knowledge_base_service(
     return KnowledgeBaseService(kb_repo)
 
 
-
+from app.storage.s3_compatible_storage import S3CompatibleStorage
 def get_file_storage(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> FileStorage:
     """Provide the file storage implementation.
 
-    This is the ONE place to change when cloud storage is added later —
-    swap `LocalFileStorage(...)` for e.g. `S3FileStorage(settings)`, and
-    nothing else in the app needs to change.
+    Switches between local disk (dev) and S3 (production) based on
+    STORAGE_BACKEND — no other code needs to know which is active.
     """
+    if settings.STORAGE_BACKEND == "s3":
+        return S3CompatibleStorage(
+            bucket_name=settings.S3_BUCKET_NAME,
+            endpoint_url=settings.S3_ENDPOINT_URL or None,
+            access_key=settings.S3_ACCESS_KEY or None,
+            secret_key=settings.S3_SECRET_KEY or None,
+        )
     return LocalFileStorage(base_path=settings.LOCAL_STORAGE_PATH)
 
 
@@ -278,11 +287,16 @@ def get_hybrid_retriever(
 def get_reranker_provider() -> RerankerProvider:
     """Provide a singleton RerankerProvider.
 
-    Cached with lru_cache — same reasoning as embedding models (Module 9):
-    the underlying model is expensive to load and safe to share across
-    requests.
+    Switches between the local CPU-based cross-encoder and Cohere's
+    hosted API based on RERANKER_PROVIDER — local reranking has
+    consistently been this pipeline's dominant latency source, so Cohere
+    is the default recommendation for production use.
     """
     settings = get_settings()
+    if settings.RERANKER_PROVIDER == "cohere":
+        return CohereRerankerProvider(
+            settings.COHERE_API_KEY, model=settings.COHERE_RERANK_MODEL
+        )
     return BgeRerankerProvider(
         settings.RERANKER_MODEL,
         cache_dir=settings.RERANKER_MODEL_CACHE_DIR,

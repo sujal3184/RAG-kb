@@ -3,6 +3,7 @@
 import uuid
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from app.models.user import UserRole
 
 
 class UserRegisterRequest(BaseModel):
@@ -28,7 +29,7 @@ class UserResponse(BaseModel):
     full_name: str | None
     is_active: bool
     is_verified: bool
-
+    role: UserRole
 
 class TokenResponse(BaseModel):
     access_token: str

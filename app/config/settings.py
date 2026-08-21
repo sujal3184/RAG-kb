@@ -75,6 +75,12 @@ class Settings(BaseSettings):
     # a mounted volume path so files survive container restarts.
     LOCAL_STORAGE_PATH: str = "./data/uploads"
 
+    STORAGE_BACKEND: str = "local"  # "local" or "s3"
+    S3_BUCKET_NAME: str = ""
+    S3_ENDPOINT_URL: str = ""   # only for non-AWS providers like R2
+    S3_ACCESS_KEY: str = ""     # only for non-AWS providers
+    S3_SECRET_KEY: str = ""     # only for non-AWS providers
+
     # --- Document upload limits ----------------------------------------------
     MAX_UPLOAD_SIZE_MB: int = 50
     ALLOWED_UPLOAD_EXTENSIONS: str = "pdf,docx,txt,md,html,csv"
@@ -191,6 +197,12 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = ""
     EMAIL_FROM_ADDRESS: str = "onboarding@resend.dev"
     EMAIL_FROM_NAME: str = "Knowledge Base RAG"
+
+
+    COHERE_API_KEY: str = ""
+    COHERE_RERANK_MODEL: str = "rerank-v3.5"
+    RERANKER_PROVIDER: str = "local"  # "local" or "cohere"
+
 
     @property
     def cors_origins_list(self) -> list[str]:

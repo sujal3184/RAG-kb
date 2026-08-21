@@ -34,6 +34,8 @@ from app.retrieval.qdrant_store import QdrantVectorStore
 from app.storage.local_storage import LocalFileStorage
 from app.workers.celery_app import celery_app
 from app.observability.metrics import documents_processed_total
+from app.storage.base import FileStorage
+from app.storage.s3_compatible_storage import S3CompatibleStorage
 
 
 logger = logging.getLogger(__name__)
@@ -55,7 +57,7 @@ class DocumentProcessingTask(Task):
 
     _embedding_service: EmbeddingService | None = None
     _vector_store: QdrantVectorStore | None = None
-    _file_storage: LocalFileStorage | None = None
+    _file_storage: FileStorage | None = None
     _chunking_factory: ChunkingFactory | None = None
 
     @property
@@ -83,14 +85,26 @@ class DocumentProcessingTask(Task):
                 host=settings.QDRANT_HOST,
                 port=settings.QDRANT_PORT,
                 collection_prefix=settings.QDRANT_COLLECTION_PREFIX,
+                api_key=settings.QDRANT_API_KEY or None,
             )
         return self._vector_store
 
     @property
-    def file_storage(self) -> LocalFileStorage:
+    def file_storage(self) -> FileStorage:
+        """Provide the configured file storage backend (local or S3),
+        matching whatever the web app uses — set via STORAGE_BACKEND, so
+        the worker and the app never disagree about where files live."""
         if self._file_storage is None:
             settings = get_settings()
-            self._file_storage = LocalFileStorage(base_path=settings.LOCAL_STORAGE_PATH)
+            if settings.STORAGE_BACKEND == "s3":
+                self._file_storage = S3CompatibleStorage(
+                    bucket_name=settings.S3_BUCKET_NAME,
+                    endpoint_url=settings.S3_ENDPOINT_URL or None,
+                    access_key=settings.S3_ACCESS_KEY or None,
+                    secret_key=settings.S3_SECRET_KEY or None,
+                )
+            else:
+                self._file_storage = LocalFileStorage(base_path=settings.LOCAL_STORAGE_PATH)
         return self._file_storage
 
     @property
@@ -107,24 +121,10 @@ class DocumentProcessingTask(Task):
     max_retries=None,  # actual retry limit is read from settings at runtime, see below
 )
 def process_document(self: DocumentProcessingTask, document_id: str) -> None:
-    """Celery task entrypoint — process a single uploaded document.
-
-    Args:
-        document_id: string UUID of the Document to process (Celery task
-            arguments must be JSON-serializable, so we pass a string
-            rather than a uuid.UUID object).
-    """
     try:
         asyncio.run(_process_document_async(self, uuid.UUID(document_id)))
     finally:
-        # Each asyncio.run() call creates a NEW event loop. The shared
-        # engine's connection pool must not hold onto connections tied to
-        # a loop that's about to be destroyed — otherwise the NEXT task
-        # run in this same worker process crashes trying to reuse a
-        # connection bound to a dead event loop. Disposing forces fresh
-        # connections on the next task's own event loop.
         from app.db.session import engine
-
         asyncio.run(engine.dispose())
 
 

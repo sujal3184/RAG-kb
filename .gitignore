@@ -10,3 +10,5 @@ __pycache__/
 data/
 ./data/models
 evaluation/results/
+ecs-task-definition.json
+ecs-worker-task-definition.json
